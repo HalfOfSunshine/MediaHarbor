@@ -1,24 +1,40 @@
-//
-//  ContentView.swift
-//  MediaHarbor
-//
-//  Created by mamingkang on 2026/3/24.
-//
-
 import SwiftUI
 
 struct ContentView: View {
+    @Environment(AppState.self) private var appState
+
     var body: some View {
-        VStack {
-            Image(systemName: "globe")
-                .imageScale(.large)
-                .foregroundStyle(.tint)
-            Text("Hello, world!")
+        @Bindable var appState = appState
+
+        TabView(selection: $appState.selectedTab) {
+            HomeView()
+                .tabItem {
+                    Label(AppTab.home.title, systemImage: AppTab.home.systemImage)
+                }
+                .tag(AppTab.home)
+
+            LibraryView()
+                .tabItem {
+                    Label(AppTab.library.title, systemImage: AppTab.library.systemImage)
+                }
+                .tag(AppTab.library)
+
+            DownloadsView()
+                .tabItem {
+                    Label(AppTab.downloads.title, systemImage: AppTab.downloads.systemImage)
+                }
+                .tag(AppTab.downloads)
+
+            SettingsView()
+                .tabItem {
+                    Label(AppTab.settings.title, systemImage: AppTab.settings.systemImage)
+                }
+                .tag(AppTab.settings)
         }
-        .padding()
     }
 }
 
 #Preview {
     ContentView()
+        .environment(AppState())
 }

@@ -6,6 +6,12 @@
 	objectVersion = 77;
 	objects = {
 
+/* Begin PBXBuildFile section */
+		00676F4DC580229BE15EA1E5 /* Pods_MediaHarbor.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = F71E93C3841C7DE5C4C65A9F /* Pods_MediaHarbor.framework */; };
+		1BB66C73F731EAB8F4557F78 /* Pods_MediaHarborUITests.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = C49B8CE0838BD58E2EC60EB3 /* Pods_MediaHarborUITests.framework */; };
+		829462605C257A119B3498C0 /* Pods_MediaHarborTests.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = E3F658BE64AE62F7406DE21B /* Pods_MediaHarborTests.framework */; };
+/* End PBXBuildFile section */
+
 /* Begin PBXContainerItemProxy section */
 		AB56CA522F723347004EEC88 /* PBXContainerItemProxy */ = {
 			isa = PBXContainerItemProxy;
@@ -24,30 +30,33 @@
 /* End PBXContainerItemProxy section */
 
 /* Begin PBXFileReference section */
+		9B5CB554E652315DAD12606E /* Pods-MediaHarborUITests.debug.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = "Pods-MediaHarborUITests.debug.xcconfig"; path = "Target Support Files/Pods-MediaHarborUITests/Pods-MediaHarborUITests.debug.xcconfig"; sourceTree = "<group>"; };
 		AB56CA412F723346004EEC88 /* MediaHarbor.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = MediaHarbor.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		AB56CA512F723347004EEC88 /* MediaHarborTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = MediaHarborTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		AB56CA5B2F723347004EEC88 /* MediaHarborUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = MediaHarborUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+		B5A221C5A7D7AD6580452E82 /* Pods-MediaHarbor.release.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = "Pods-MediaHarbor.release.xcconfig"; path = "Target Support Files/Pods-MediaHarbor/Pods-MediaHarbor.release.xcconfig"; sourceTree = "<group>"; };
+		C49B8CE0838BD58E2EC60EB3 /* Pods_MediaHarborUITests.framework */ = {isa = PBXFileReference; explicitFileType = wrapper.framework; includeInIndex = 0; path = Pods_MediaHarborUITests.framework; sourceTree = BUILT_PRODUCTS_DIR; };
+		D434D968EDBD18AA4EBBF481 /* Pods-MediaHarborTests.release.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = "Pods-MediaHarborTests.release.xcconfig"; path = "Target Support Files/Pods-MediaHarborTests/Pods-MediaHarborTests.release.xcconfig"; sourceTree = "<group>"; };
+		D8A9F26B9D832B371E545292 /* Pods-MediaHarborTests.debug.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = "Pods-MediaHarborTests.debug.xcconfig"; path = "Target Support Files/Pods-MediaHarborTests/Pods-MediaHarborTests.debug.xcconfig"; sourceTree = "<group>"; };
+		E0A93CAD5EDB0279717CCE10 /* Pods-MediaHarbor.debug.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = "Pods-MediaHarbor.debug.xcconfig"; path = "Target Support Files/Pods-MediaHarbor/Pods-MediaHarbor.debug.xcconfig"; sourceTree = "<group>"; };
+		E3F658BE64AE62F7406DE21B /* Pods_MediaHarborTests.framework */ = {isa = PBXFileReference; explicitFileType = wrapper.framework; includeInIndex = 0; path = Pods_MediaHarborTests.framework; sourceTree = BUILT_PRODUCTS_DIR; };
+		EFDC2FD14C7A95FC13750F96 /* Pods-MediaHarborUITests.release.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = "Pods-MediaHarborUITests.release.xcconfig"; path = "Target Support Files/Pods-MediaHarborUITests/Pods-MediaHarborUITests.release.xcconfig"; sourceTree = "<group>"; };
+		F71E93C3841C7DE5C4C65A9F /* Pods_MediaHarbor.framework */ = {isa = PBXFileReference; explicitFileType = wrapper.framework; includeInIndex = 0; path = Pods_MediaHarbor.framework; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedRootGroup section */
 		AB56CA432F723346004EEC88 /* MediaHarbor */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
-			exceptions = (
-			);
 			path = MediaHarbor;
 			sourceTree = "<group>";
 		};
 		AB56CA542F723347004EEC88 /* MediaHarborTests */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
-			exceptions = (
-			);
 			path = MediaHarborTests;
 			sourceTree = "<group>";
 		};
 		AB56CA5E2F723347004EEC88 /* MediaHarborUITests */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
-			exceptions = (
-			);
 			path = MediaHarborUITests;
 			sourceTree = "<group>";
 		};
@@ -58,6 +67,7 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				00676F4DC580229BE15EA1E5 /* Pods_MediaHarbor.framework in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -65,6 +75,7 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				829462605C257A119B3498C0 /* Pods_MediaHarborTests.framework in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -72,12 +83,36 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				1BB66C73F731EAB8F4557F78 /* Pods_MediaHarborUITests.framework in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
 /* End PBXFrameworksBuildPhase section */
 
 /* Begin PBXGroup section */
+		052F2054ABDD06468A350EA8 /* Frameworks */ = {
+			isa = PBXGroup;
+			children = (
+				F71E93C3841C7DE5C4C65A9F /* Pods_MediaHarbor.framework */,
+				E3F658BE64AE62F7406DE21B /* Pods_MediaHarborTests.framework */,
+				C49B8CE0838BD58E2EC60EB3 /* Pods_MediaHarborUITests.framework */,
+			);
+			name = Frameworks;
+			sourceTree = "<group>";
+		};
+		8C7A4E2B05D7E0141152512A /* Pods */ = {
+			isa = PBXGroup;
+			children = (
+				E0A93CAD5EDB0279717CCE10 /* Pods-MediaHarbor.debug.xcconfig */,
+				B5A221C5A7D7AD6580452E82 /* Pods-MediaHarbor.release.xcconfig */,
+				D8A9F26B9D832B371E545292 /* Pods-MediaHarborTests.debug.xcconfig */,
+				D434D968EDBD18AA4EBBF481 /* Pods-MediaHarborTests.release.xcconfig */,
+				9B5CB554E652315DAD12606E /* Pods-MediaHarborUITests.debug.xcconfig */,
+				EFDC2FD14C7A95FC13750F96 /* Pods-MediaHarborUITests.release.xcconfig */,
+			);
+			path = Pods;
+			sourceTree = "<group>";
+		};
 		AB56CA382F723345004EEC88 = {
 			isa = PBXGroup;
 			children = (
@@ -85,6 +120,8 @@
 				AB56CA542F723347004EEC88 /* MediaHarborTests */,
 				AB56CA5E2F723347004EEC88 /* MediaHarborUITests */,
 				AB56CA422F723346004EEC88 /* Products */,
+				8C7A4E2B05D7E0141152512A /* Pods */,
+				052F2054ABDD06468A350EA8 /* Frameworks */,
 			);
 			sourceTree = "<group>";
 		};
@@ -105,9 +142,11 @@
 			isa = PBXNativeTarget;
 			buildConfigurationList = AB56CA652F723347004EEC88 /* Build configuration list for PBXNativeTarget "MediaHarbor" */;
 			buildPhases = (
+				91F75C3A75BFF89E7B908B99 /* [CP] Check Pods Manifest.lock */,
 				AB56CA3D2F723346004EEC88 /* Sources */,
 				AB56CA3E2F723346004EEC88 /* Frameworks */,
 				AB56CA3F2F723346004EEC88 /* Resources */,
+				87FD05979501D11F26F5C22C /* [CP] Copy Pods Resources */,
 			);
 			buildRules = (
 			);
@@ -125,6 +164,7 @@
 			isa = PBXNativeTarget;
 			buildConfigurationList = AB56CA682F723347004EEC88 /* Build configuration list for PBXNativeTarget "MediaHarborTests" */;
 			buildPhases = (
+				00D800D0167EC84FBEC4E76C /* [CP] Check Pods Manifest.lock */,
 				AB56CA4D2F723347004EEC88 /* Sources */,
 				AB56CA4E2F723347004EEC88 /* Frameworks */,
 				AB56CA4F2F723347004EEC88 /* Resources */,
@@ -146,6 +186,7 @@
 			isa = PBXNativeTarget;
 			buildConfigurationList = AB56CA6B2F723347004EEC88 /* Build configuration list for PBXNativeTarget "MediaHarborUITests" */;
 			buildPhases = (
+				7CF2732B446FDD491342D8D2 /* [CP] Check Pods Manifest.lock */,
 				AB56CA572F723347004EEC88 /* Sources */,
 				AB56CA582F723347004EEC88 /* Frameworks */,
 				AB56CA592F723347004EEC88 /* Resources */,
@@ -187,10 +228,10 @@
 				};
 			};
 			buildConfigurationList = AB56CA3C2F723345004EEC88 /* Build configuration list for PBXProject "MediaHarbor" */;
-			developmentRegion = en;
+			developmentRegion = "zh-Hans";
 			hasScannedForEncodings = 0;
 			knownRegions = (
-				en,
+				"zh-Hans",
 				Base,
 			);
 			mainGroup = AB56CA382F723345004EEC88;
@@ -230,6 +271,92 @@
 			runOnlyForDeploymentPostprocessing = 0;
 		};
 /* End PBXResourcesBuildPhase section */
+
+/* Begin PBXShellScriptBuildPhase section */
+		00D800D0167EC84FBEC4E76C /* [CP] Check Pods Manifest.lock */ = {
+			isa = PBXShellScriptBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			inputFileListPaths = (
+			);
+			inputPaths = (
+				"${PODS_PODFILE_DIR_PATH}/Podfile.lock",
+				"${PODS_ROOT}/Manifest.lock",
+			);
+			name = "[CP] Check Pods Manifest.lock";
+			outputFileListPaths = (
+			);
+			outputPaths = (
+				"$(DERIVED_FILE_DIR)/Pods-MediaHarborTests-checkManifestLockResult.txt",
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+			shellPath = /bin/sh;
+			shellScript = "diff \"${PODS_PODFILE_DIR_PATH}/Podfile.lock\" \"${PODS_ROOT}/Manifest.lock\" > /dev/null\nif [ $? != 0 ] ; then\n    # print error to STDERR\n    echo \"error: The sandbox is not in sync with the Podfile.lock. Run 'pod install' or update your CocoaPods installation.\" >&2\n    exit 1\nfi\n# This output is used by Xcode 'outputs' to avoid re-running this script phase.\necho \"SUCCESS\" > \"${SCRIPT_OUTPUT_FILE_0}\"\n";
+			showEnvVarsInLog = 0;
+		};
+		7CF2732B446FDD491342D8D2 /* [CP] Check Pods Manifest.lock */ = {
+			isa = PBXShellScriptBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			inputFileListPaths = (
+			);
+			inputPaths = (
+				"${PODS_PODFILE_DIR_PATH}/Podfile.lock",
+				"${PODS_ROOT}/Manifest.lock",
+			);
+			name = "[CP] Check Pods Manifest.lock";
+			outputFileListPaths = (
+			);
+			outputPaths = (
+				"$(DERIVED_FILE_DIR)/Pods-MediaHarborUITests-checkManifestLockResult.txt",
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+			shellPath = /bin/sh;
+			shellScript = "diff \"${PODS_PODFILE_DIR_PATH}/Podfile.lock\" \"${PODS_ROOT}/Manifest.lock\" > /dev/null\nif [ $? != 0 ] ; then\n    # print error to STDERR\n    echo \"error: The sandbox is not in sync with the Podfile.lock. Run 'pod install' or update your CocoaPods installation.\" >&2\n    exit 1\nfi\n# This output is used by Xcode 'outputs' to avoid re-running this script phase.\necho \"SUCCESS\" > \"${SCRIPT_OUTPUT_FILE_0}\"\n";
+			showEnvVarsInLog = 0;
+		};
+		87FD05979501D11F26F5C22C /* [CP] Copy Pods Resources */ = {
+			isa = PBXShellScriptBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			inputFileListPaths = (
+				"${PODS_ROOT}/Target Support Files/Pods-MediaHarbor/Pods-MediaHarbor-resources-${CONFIGURATION}-input-files.xcfilelist",
+			);
+			name = "[CP] Copy Pods Resources";
+			outputFileListPaths = (
+				"${PODS_ROOT}/Target Support Files/Pods-MediaHarbor/Pods-MediaHarbor-resources-${CONFIGURATION}-output-files.xcfilelist",
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+			shellPath = /bin/sh;
+			shellScript = "\"${PODS_ROOT}/Target Support Files/Pods-MediaHarbor/Pods-MediaHarbor-resources.sh\"\n";
+			showEnvVarsInLog = 0;
+		};
+		91F75C3A75BFF89E7B908B99 /* [CP] Check Pods Manifest.lock */ = {
+			isa = PBXShellScriptBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			inputFileListPaths = (
+			);
+			inputPaths = (
+				"${PODS_PODFILE_DIR_PATH}/Podfile.lock",
+				"${PODS_ROOT}/Manifest.lock",
+			);
+			name = "[CP] Check Pods Manifest.lock";
+			outputFileListPaths = (
+			);
+			outputPaths = (
+				"$(DERIVED_FILE_DIR)/Pods-MediaHarbor-checkManifestLockResult.txt",
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+			shellPath = /bin/sh;
+			shellScript = "diff \"${PODS_PODFILE_DIR_PATH}/Podfile.lock\" \"${PODS_ROOT}/Manifest.lock\" > /dev/null\nif [ $? != 0 ] ; then\n    # print error to STDERR\n    echo \"error: The sandbox is not in sync with the Podfile.lock. Run 'pod install' or update your CocoaPods installation.\" >&2\n    exit 1\nfi\n# This output is used by Xcode 'outputs' to avoid re-running this script phase.\necho \"SUCCESS\" > \"${SCRIPT_OUTPUT_FILE_0}\"\n";
+			showEnvVarsInLog = 0;
+		};
+/* End PBXShellScriptBuildPhase section */
 
 /* Begin PBXSourcesBuildPhase section */
 		AB56CA3D2F723346004EEC88 /* Sources */ = {
@@ -306,7 +433,7 @@
 				DEBUG_INFORMATION_FORMAT = dwarf;
 				ENABLE_STRICT_OBJC_MSGSEND = YES;
 				ENABLE_TESTABILITY = YES;
-				ENABLE_USER_SCRIPT_SANDBOXING = YES;
+				ENABLE_USER_SCRIPT_SANDBOXING = NO;
 				GCC_C_LANGUAGE_STANDARD = gnu17;
 				GCC_DYNAMIC_NO_PIC = NO;
 				GCC_NO_COMMON_BLOCKS = YES;
@@ -369,7 +496,7 @@
 				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
 				ENABLE_NS_ASSERTIONS = NO;
 				ENABLE_STRICT_OBJC_MSGSEND = YES;
-				ENABLE_USER_SCRIPT_SANDBOXING = YES;
+				ENABLE_USER_SCRIPT_SANDBOXING = NO;
 				GCC_C_LANGUAGE_STANDARD = gnu17;
 				GCC_NO_COMMON_BLOCKS = YES;
 				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
@@ -390,6 +517,7 @@
 		};
 		AB56CA662F723347004EEC88 /* Debug */ = {
 			isa = XCBuildConfiguration;
+			baseConfigurationReference = E0A93CAD5EDB0279717CCE10 /* Pods-MediaHarbor.debug.xcconfig */;
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
@@ -398,12 +526,8 @@
 				DEVELOPMENT_ASSET_PATHS = "\"MediaHarbor/Preview Content\"";
 				DEVELOPMENT_TEAM = DGCSK273MG;
 				ENABLE_PREVIEWS = YES;
-				GENERATE_INFOPLIST_FILE = YES;
-				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
-				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
-				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
-				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
-				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone = "UIInterfaceOrientationPortrait UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
+				GENERATE_INFOPLIST_FILE = NO;
+				INFOPLIST_FILE = "Config/Info-Debug.plist";
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/Frameworks",
@@ -419,6 +543,7 @@
 		};
 		AB56CA672F723347004EEC88 /* Release */ = {
 			isa = XCBuildConfiguration;
+			baseConfigurationReference = B5A221C5A7D7AD6580452E82 /* Pods-MediaHarbor.release.xcconfig */;
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
@@ -427,12 +552,8 @@
 				DEVELOPMENT_ASSET_PATHS = "\"MediaHarbor/Preview Content\"";
 				DEVELOPMENT_TEAM = DGCSK273MG;
 				ENABLE_PREVIEWS = YES;
-				GENERATE_INFOPLIST_FILE = YES;
-				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
-				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
-				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
-				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
-				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone = "UIInterfaceOrientationPortrait UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
+				GENERATE_INFOPLIST_FILE = NO;
+				INFOPLIST_FILE = "Config/Info-Release.plist";
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/Frameworks",
@@ -448,6 +569,7 @@
 		};
 		AB56CA692F723347004EEC88 /* Debug */ = {
 			isa = XCBuildConfiguration;
+			baseConfigurationReference = D8A9F26B9D832B371E545292 /* Pods-MediaHarborTests.debug.xcconfig */;
 			buildSettings = {
 				BUNDLE_LOADER = "$(TEST_HOST)";
 				CODE_SIGN_STYLE = Automatic;
@@ -467,6 +589,7 @@
 		};
 		AB56CA6A2F723347004EEC88 /* Release */ = {
 			isa = XCBuildConfiguration;
+			baseConfigurationReference = D434D968EDBD18AA4EBBF481 /* Pods-MediaHarborTests.release.xcconfig */;
 			buildSettings = {
 				BUNDLE_LOADER = "$(TEST_HOST)";
 				CODE_SIGN_STYLE = Automatic;
@@ -486,12 +609,13 @@
 		};
 		AB56CA6C2F723347004EEC88 /* Debug */ = {
 			isa = XCBuildConfiguration;
+			baseConfigurationReference = 9B5CB554E652315DAD12606E /* Pods-MediaHarborUITests.debug.xcconfig */;
 			buildSettings = {
-				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
 				DEVELOPMENT_TEAM = DGCSK273MG;
 				GENERATE_INFOPLIST_FILE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
 				MARKETING_VERSION = 1.0;
 				PRODUCT_BUNDLE_IDENTIFIER = com.mk.MediaHarborUITests;
 				PRODUCT_NAME = "$(TARGET_NAME)";
@@ -504,12 +628,13 @@
 		};
 		AB56CA6D2F723347004EEC88 /* Release */ = {
 			isa = XCBuildConfiguration;
+			baseConfigurationReference = EFDC2FD14C7A95FC13750F96 /* Pods-MediaHarborUITests.release.xcconfig */;
 			buildSettings = {
-				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
 				DEVELOPMENT_TEAM = DGCSK273MG;
 				GENERATE_INFOPLIST_FILE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
 				MARKETING_VERSION = 1.0;
 				PRODUCT_BUNDLE_IDENTIFIER = com.mk.MediaHarborUITests;
 				PRODUCT_NAME = "$(TARGET_NAME)";
