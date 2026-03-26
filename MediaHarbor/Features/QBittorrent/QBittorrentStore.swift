@@ -13,12 +13,17 @@ final class QBittorrentStore {
     var isRefreshing = false
     var actingTorrentHash: String?
     var deletingTorrentHash: String?
+    var sortKey: QBittorrentTorrentSortKey = .addedOn
+    var sortDirection: QBittorrentTorrentSortDirection = .descending
 
     @ObservationIgnored
     private let sessionStore: QBittorrentSessionStore
 
     @ObservationIgnored
     private let apiClient: QBittorrentAPIClient
+
+    @ObservationIgnored
+    private var queuedRefresh = false
 
     init(
         sessionStore: QBittorrentSessionStore = QBittorrentSessionStore(),
@@ -85,6 +90,7 @@ final class QBittorrentStore {
 
     func refresh() async {
         guard isRefreshing == false else {
+            queuedRefresh = true
             return
         }
 
@@ -96,21 +102,26 @@ final class QBittorrentStore {
         isRefreshing = true
         errorMessage = nil
 
-        defer {
-            isRefreshing = false
-        }
-
         do {
             let dashboard = try await apiClient.dashboard(
                 baseURL: context.baseURL,
                 username: context.session.username,
-                password: context.password
+                password: context.password,
+                sortKey: sortKey,
+                sortDirection: sortDirection
             )
 
             transferInfo = dashboard.transferInfo
             torrents = dashboard.torrents
         } catch {
             handle(error)
+        }
+
+        isRefreshing = false
+
+        if queuedRefresh {
+            queuedRefresh = false
+            await refresh()
         }
     }
 

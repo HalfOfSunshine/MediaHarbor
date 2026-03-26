@@ -223,6 +223,8 @@ struct QBTorrentRow: View {
 
 struct QBTorrentPaginationCard: View {
     @Binding var pageSize: QBTorrentPageSize
+    @Binding var sortKey: QBittorrentTorrentSortKey
+    @Binding var sortDirection: QBittorrentTorrentSortDirection
 
     let currentPage: Int
     let totalPages: Int
@@ -247,6 +249,22 @@ struct QBTorrentPaginationCard: View {
                 Picker("每页", selection: $pageSize) {
                     ForEach(QBTorrentPageSize.allCases) { size in
                         Text(size.title).tag(size)
+                    }
+                }
+                .pickerStyle(.menu)
+            }
+
+            HStack(spacing: 10) {
+                Picker("排序字段", selection: $sortKey) {
+                    ForEach(QBittorrentTorrentSortKey.allCases) { key in
+                        Text(key.title).tag(key)
+                    }
+                }
+                .pickerStyle(.menu)
+
+                Picker("排序方向", selection: $sortDirection) {
+                    ForEach(QBittorrentTorrentSortDirection.allCases) { direction in
+                        Text(direction.title).tag(direction)
                     }
                 }
                 .pickerStyle(.menu)

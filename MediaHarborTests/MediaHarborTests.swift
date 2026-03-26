@@ -51,6 +51,15 @@ struct MediaHarborTests {
     }
 
     @Test
+    func qbittorrentSortOptionsUseExpectedRequestValues() async throws {
+        #expect(QBittorrentTorrentSortKey.addedOn.requestValue == "added_on")
+        #expect(QBittorrentTorrentSortKey.downloadSpeed.requestValue == "dlspeed")
+        #expect(QBittorrentTorrentSortKey.uploadSpeed.requestValue == "upspeed")
+        #expect(QBittorrentTorrentSortDirection.descending.reverseValue == true)
+        #expect(QBittorrentTorrentSortDirection.ascending.reverseValue == false)
+    }
+
+    @Test
     func mediaLibrariesKeepMediaFoldersAndSortAlphabetically() async throws {
         let libraries = [
             JellyfinLibrary(

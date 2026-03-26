@@ -57,6 +57,26 @@ struct DownloadsView: View {
 
                                 QBTorrentPaginationCard(
                                     pageSize: $pageSize,
+                                    sortKey: Binding(
+                                        get: { qbittorrent.sortKey },
+                                        set: { newValue in
+                                            currentPage = 0
+                                            qbittorrent.sortKey = newValue
+                                            Task {
+                                                await qbittorrent.refresh()
+                                            }
+                                        }
+                                    ),
+                                    sortDirection: Binding(
+                                        get: { qbittorrent.sortDirection },
+                                        set: { newValue in
+                                            currentPage = 0
+                                            qbittorrent.sortDirection = newValue
+                                            Task {
+                                                await qbittorrent.refresh()
+                                            }
+                                        }
+                                    ),
                                     currentPage: normalizedPageIndex,
                                     totalPages: totalPages,
                                     itemRangeText: itemRangeText

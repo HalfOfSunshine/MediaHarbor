@@ -281,6 +281,94 @@ enum QBTorrentStateCategory: Sendable {
     case unknown
 }
 
+enum QBittorrentTorrentSortKey: String, CaseIterable, Identifiable, Sendable {
+    case addedOn = "added_on"
+    case name = "name"
+    case state = "state"
+    case progress = "progress"
+    case totalSize = "total_size"
+    case size = "size"
+    case downloaded = "downloaded"
+    case uploaded = "uploaded"
+    case downloadSpeed = "dlspeed"
+    case uploadSpeed = "upspeed"
+    case eta = "eta"
+    case ratio = "ratio"
+    case category = "category"
+    case tags = "tags"
+    case savePath = "save_path"
+
+    var id: String {
+        rawValue
+    }
+
+    var requestValue: String {
+        rawValue
+    }
+
+    var title: String {
+        switch self {
+        case .addedOn:
+            return "添加时间"
+        case .name:
+            return "名称"
+        case .state:
+            return "状态"
+        case .progress:
+            return "进度"
+        case .totalSize:
+            return "总大小"
+        case .size:
+            return "当前大小"
+        case .downloaded:
+            return "已下载"
+        case .uploaded:
+            return "已上传"
+        case .downloadSpeed:
+            return "下载速度"
+        case .uploadSpeed:
+            return "上传速度"
+        case .eta:
+            return "剩余时间"
+        case .ratio:
+            return "分享率"
+        case .category:
+            return "分类"
+        case .tags:
+            return "标签"
+        case .savePath:
+            return "保存路径"
+        }
+    }
+}
+
+enum QBittorrentTorrentSortDirection: String, CaseIterable, Identifiable, Sendable {
+    case descending
+    case ascending
+
+    var id: String {
+        rawValue
+    }
+
+    var title: String {
+        switch self {
+        case .descending:
+            return "降序"
+        case .ascending:
+            return "升序"
+        }
+    }
+
+    var reverseValue: Bool {
+        switch self {
+        case .descending:
+            return true
+        case .ascending:
+            return false
+        }
+    }
+}
+
 enum QBTorrentPageSize: Int, CaseIterable, Identifiable, Sendable {
     case twenty = 20
     case fifty = 50

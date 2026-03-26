@@ -59,11 +59,21 @@ struct QBittorrentAPIClient {
         return try await appVersion(baseURL: baseURL)
     }
 
-    func dashboard(baseURL: URL, username: String, password: String) async throws -> QBittorrentDashboard {
+    func dashboard(
+        baseURL: URL,
+        username: String,
+        password: String,
+        sortKey: QBittorrentTorrentSortKey,
+        sortDirection: QBittorrentTorrentSortDirection
+    ) async throws -> QBittorrentDashboard {
         try await authenticate(baseURL: baseURL, username: username, password: password)
 
         async let fetchedTransferInfo = transferInfo(baseURL: baseURL)
-        async let fetchedTorrents = torrents(baseURL: baseURL)
+        async let fetchedTorrents = torrents(
+            baseURL: baseURL,
+            sortKey: sortKey,
+            sortDirection: sortDirection
+        )
 
         return QBittorrentDashboard(
             transferInfo: try await fetchedTransferInfo,
@@ -140,29 +150,22 @@ struct QBittorrentAPIClient {
         return dto.asTransferInfo
     }
 
-    private func torrents(baseURL: URL) async throws -> [QBTorrent] {
+    private func torrents(
+        baseURL: URL,
+        sortKey: QBittorrentTorrentSortKey,
+        sortDirection: QBittorrentTorrentSortDirection
+    ) async throws -> [QBTorrent] {
         let request = try makeRequest(
             baseURL: baseURL,
             path: "api/v2/torrents/info",
             queryItems: [
-                URLQueryItem(name: "sort", value: "added_on"),
-                URLQueryItem(name: "reverse", value: "true"),
+                URLQueryItem(name: "sort", value: sortKey.requestValue),
+                URLQueryItem(name: "reverse", value: sortDirection.reverseValue ? "true" : "false"),
             ]
         )
 
         let dto: [QBTorrentDTO] = try await send(request)
-        return dto.compactMap(\.asTorrent).sorted { lhs, rhs in
-            switch (lhs.addedOn, rhs.addedOn) {
-            case let (.some(lhsDate), .some(rhsDate)):
-                return lhsDate > rhsDate
-            case (.some, .none):
-                return true
-            case (.none, .some):
-                return false
-            case (.none, .none):
-                return lhs.name.localizedCaseInsensitiveCompare(rhs.name) == .orderedAscending
-            }
-        }
+        return dto.compactMap(\.asTorrent)
     }
 
     private func makeRequest(

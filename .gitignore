@@ -35,3 +35,6 @@ Pods/
 # Editor settings
 .idea/
 .vscode/
+
+# Local design working files
+/Design/
