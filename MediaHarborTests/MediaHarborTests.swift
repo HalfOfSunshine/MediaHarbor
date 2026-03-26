@@ -11,17 +11,43 @@ import Testing
 struct MediaHarborTests {
 
     @Test
-    func jellyfinURLNormalizationAddsSchemeAndTrimsTrailingSlash() async throws {
-        let url = JellyfinServerURL.normalize("demo.local:8096/")
+    func jellyfinURLNormalizationAddsSchemeDefaultPortAndTrimsTrailingSlash() async throws {
+        let url = JellyfinServerURL.normalize("demo.local/")
 
         #expect(url?.absoluteString == "https://demo.local:8096")
     }
 
     @Test
     func jellyfinURLNormalizationPreservesExplicitHTTPAndBasePath() async throws {
-        let url = JellyfinServerURL.normalize("http://192.168.50.20:8096/jellyfin/")
+        let url = JellyfinServerURL.normalize("http://192.168.50.20/jellyfin/")
 
         #expect(url?.absoluteString == "http://192.168.50.20:8096/jellyfin")
+    }
+
+    @Test
+    func qbittorrentURLNormalizationAddsDefaultHTTPPortAndTrimsTrailingSlash() async throws {
+        let url = QBittorrentServerURL.normalize("router.mingkang.uk/")
+
+        #expect(url?.absoluteString == "http://router.mingkang.uk:8899")
+    }
+
+    @Test
+    func qbittorrentPaginationClampsOutOfRangePageIndex() async throws {
+        let normalizedPage = QBTorrentPagination.normalizedPageIndex(9, itemCount: 36, pageSize: 20)
+        let totalPages = QBTorrentPagination.totalPages(itemCount: 36, pageSize: 20)
+
+        #expect(totalPages == 2)
+        #expect(normalizedPage == 1)
+    }
+
+    @Test
+    func qbittorrentPaginationReturnsExpectedSliceAndRangeText() async throws {
+        let values = Array(1 ... 45)
+        let pagedValues = Array(QBTorrentPagination.items(values, pageIndex: 1, pageSize: 20))
+        let rangeText = QBTorrentPagination.rangeText(itemCount: values.count, pageIndex: 1, pageSize: 20)
+
+        #expect(pagedValues == Array(21 ... 40))
+        #expect(rangeText == "第 21-40 项，共 45 项")
     }
 
     @Test

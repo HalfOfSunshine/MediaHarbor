@@ -1,6 +1,6 @@
 import SwiftUI
 
-struct JellyfinConnectView: View {
+struct QBittorrentConnectView: View {
     private enum Field: Hashable {
         case serverURL
         case username
@@ -17,43 +17,27 @@ struct JellyfinConnectView: View {
 
     var body: some View {
         NavigationStack {
-            let jellyfin = appState.jellyfin
+            let qbittorrent = appState.qbittorrent
 
             Form {
-                Section("已保存账号") {
-                    if jellyfin.savedSessions.isEmpty {
-                        Text("还没有已保存的 Jellyfin 账号。")
-                            .foregroundStyle(.secondary)
-                    } else {
-                        ForEach(jellyfin.savedSessions) { savedSession in
-                            Button {
-                                Task {
-                                    let switched = await jellyfin.switchSession(to: savedSession)
-                                    if switched {
-                                        dismiss()
-                                    }
-                                }
-                            } label: {
-                                JellyfinSavedSessionRow(
-                                    session: savedSession,
-                                    isActive: jellyfin.session?.accountKey == savedSession.accountKey
-                                )
-                            }
-                            .buttonStyle(.plain)
-                            .disabled(jellyfin.session?.accountKey == savedSession.accountKey)
-                            .swipeActions {
-                                Button("删除", role: .destructive) {
-                                    Task {
-                                        await jellyfin.removeSession(savedSession)
-                                    }
-                                }
-                            }
+                if let session = qbittorrent.session {
+                    Section("当前连接") {
+                        LabeledContent("地址", value: session.serverURLString)
+                        LabeledContent("用户", value: session.username)
+
+                        if let version = session.version {
+                            LabeledContent("版本", value: version)
+                        }
+
+                        Button("移除当前连接", role: .destructive) {
+                            qbittorrent.disconnect()
+                            dismiss()
                         }
                     }
                 }
 
-                Section("添加账号") {
-                    TextField("http://192.168.1.10:8096", text: $serverURL)
+                Section("连接 qBittorrent") {
+                    TextField("http://192.168.1.10:8899", text: $serverURL)
                         .textInputAutocapitalization(.never)
                         .autocorrectionDisabled()
                         .keyboardType(.URL)
@@ -67,19 +51,19 @@ struct JellyfinConnectView: View {
                     SecureField("密码", text: $password)
                         .focused($focusedField, equals: .password)
 
-                    Text("支持 `http://` 和 `https://`。如果你没有填写协议头，MediaHarbor 会默认补成 `https://`；如果没有写端口，会自动补成 `:8096`，末尾带 `/` 也会自动兼容。")
+                    Text("支持 `http://` 和 `https://`。如果你只输入域名或 IP，MediaHarbor 会默认补成 `http://`，没填端口时自动补成 `:8899`；末尾带 `/` 也会自动兼容。")
                         .font(.footnote)
                         .foregroundStyle(.secondary)
                 }
 
                 Section("说明") {
-                    Text("同一台 Jellyfin 服务器可以保存多个账号；不同服务器使用同一个用户名也没问题。只有“服务器地址 + Jellyfin 用户”完全相同的时候，MediaHarbor 才会把它当成同一个已保存账号并更新。")
-                    Text("新增成功后会自动切换到这个账号，并立刻重新加载媒体库和最近新增内容。")
+                    Text("这一版先接 qBittorrent 的基础管理能力：连接测试、传输速度、任务列表、暂停/继续和删除任务。")
+                    Text("连接成功后，下载页会自动刷新并加载当前队列。")
                 }
                 .font(.footnote)
                 .foregroundStyle(.secondary)
             }
-            .navigationTitle("Jellyfin 账号")
+            .navigationTitle("qBittorrent")
             .navigationBarTitleDisplayMode(.inline)
             .scrollDismissesKeyboard(.interactively)
             .toolbar {
@@ -91,10 +75,10 @@ struct JellyfinConnectView: View {
                 }
 
                 ToolbarItem(placement: .topBarTrailing) {
-                    Button(jellyfin.isConnecting ? "添加中..." : "添加") {
+                    Button(qbittorrent.isConnecting ? "连接中..." : "保存") {
                         Task {
                             focusedField = nil
-                            let connected = await jellyfin.connect(
+                            let connected = await qbittorrent.connect(
                                 serverURLString: serverURL,
                                 username: username,
                                 password: password
@@ -106,11 +90,11 @@ struct JellyfinConnectView: View {
                             }
                         }
                     }
-                    .disabled(jellyfin.isConnecting || formIsInvalid)
+                    .disabled(qbittorrent.isConnecting || formIsInvalid)
                 }
             }
             .task {
-                guard serverURL.isEmpty, username.isEmpty, let session = jellyfin.session else {
+                guard serverURL.isEmpty, username.isEmpty, let session = qbittorrent.session else {
                     return
                 }
 
@@ -118,12 +102,12 @@ struct JellyfinConnectView: View {
                 username = session.username
             }
             .alert(
-                "Jellyfin 操作失败",
+                "qBittorrent 操作失败",
                 isPresented: Binding(
-                    get: { jellyfin.errorMessage != nil },
+                    get: { qbittorrent.errorMessage != nil },
                     set: { isPresented in
                         if isPresented == false {
-                            jellyfin.errorMessage = nil
+                            qbittorrent.errorMessage = nil
                         }
                     }
                 ),
@@ -131,7 +115,7 @@ struct JellyfinConnectView: View {
                     Button("确定", role: .cancel) {}
                 },
                 message: {
-                    Text(jellyfin.errorMessage ?? "未知错误。")
+                    Text(qbittorrent.errorMessage ?? "未知错误。")
                 }
             )
         }

@@ -65,9 +65,31 @@ struct SettingsView: View {
                     }
                 }
 
+                Section("qBittorrent") {
+                    if let session = appState.qbittorrent.session {
+                        LabeledContent("地址", value: session.serverURLString)
+                        LabeledContent("用户", value: session.username)
+
+                        if let version = session.version {
+                            LabeledContent("版本", value: version)
+                        }
+
+                        Button("打开下载管理") {
+                            appState.selectedTab = .downloads
+                        }
+                    } else {
+                        Text("还没有连接 qBittorrent。下载页现在已经可以直接接入 WebUI 做基础管理。")
+                            .foregroundStyle(.secondary)
+
+                        Button("前往下载页") {
+                            appState.selectedTab = .downloads
+                        }
+                    }
+                }
+
                 Section("构建说明") {
-                    Text("当前这版 app 优先让 Jellyfin 尽快达到可用状态。")
-                    Text("Debug 构建对本地网络测试更友好。等准备公开发布前，我们再继续收紧 ATS、完善凭据存储，并补完下载器模块。")
+                    Text("当前这版已经把 Jellyfin 和 qBittorrent 的基础链路接起来了，目标是先让 NAS 上最常用的管理动作都能在 iPhone 上跑通。")
+                    Text("Debug 构建对本地网络测试更友好。等准备公开发布前，我们再继续收紧 ATS、补播放入口，并把下载器能力继续做细。")
                 }
                 .foregroundStyle(.secondary)
             }

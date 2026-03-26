@@ -10,10 +10,12 @@ end
 
 target 'MediaHarborTests' do
   inherit! :search_paths
+  pod 'SDWebImage', '~> 5.21'
 end
 
 target 'MediaHarborUITests' do
   inherit! :search_paths
+  pod 'SDWebImage', '~> 5.21'
 end
 
 post_install do |installer|
