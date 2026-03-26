@@ -1,4 +1,5 @@
 import SwiftUI
+import UIKit
 
 struct ContentView: View {
     @Environment(AppState.self) private var appState
@@ -9,27 +10,41 @@ struct ContentView: View {
         TabView(selection: $appState.selectedTab) {
             HomeView()
                 .tabItem {
-                    Label(AppTab.home.title, systemImage: AppTab.home.systemImage)
+                    tabBarItem(for: .home)
                 }
                 .tag(AppTab.home)
 
             LibraryView()
                 .tabItem {
-                    Label(AppTab.library.title, systemImage: AppTab.library.systemImage)
+                    tabBarItem(for: .library)
                 }
                 .tag(AppTab.library)
 
             DownloadsView()
                 .tabItem {
-                    Label(AppTab.downloads.title, systemImage: AppTab.downloads.systemImage)
+                    tabBarItem(for: .downloads)
                 }
                 .tag(AppTab.downloads)
 
             SettingsView()
                 .tabItem {
-                    Label(AppTab.settings.title, systemImage: AppTab.settings.systemImage)
+                    tabBarItem(for: .settings)
                 }
                 .tag(AppTab.settings)
+        }
+        .tint(MediaHarborTheme.tabSelectedColor)
+    }
+
+    @ViewBuilder
+    private func tabBarItem(for tab: AppTab) -> some View {
+        let assetName = appState.selectedTab == tab ? tab.selectedIconAssetName : tab.iconAssetName
+
+        if let image = UIImage(named: assetName)?.withRenderingMode(.alwaysOriginal) {
+            Image(uiImage: image)
+            Text(tab.title)
+        } else {
+            Image(systemName: tab.fallbackSystemImage)
+            Text(tab.title)
         }
     }
 }

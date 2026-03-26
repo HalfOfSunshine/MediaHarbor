@@ -19,16 +19,42 @@ enum AppTab: Hashable {
         }
     }
 
-    var systemImage: String {
+    var iconAssetName: String {
         switch self {
         case .home:
-            return "house.fill"
+            return "TabHome"
         case .library:
-            return "film.stack.fill"
+            return "TabLibrary"
         case .downloads:
-            return "arrow.down.circle.fill"
+            return "TabDownloads"
         case .settings:
-            return "gearshape.fill"
+            return "TabSettings"
+        }
+    }
+
+    var selectedIconAssetName: String {
+        switch self {
+        case .home:
+            return "TabHomeActive"
+        case .library:
+            return "TabLibraryActive"
+        case .downloads:
+            return "TabDownloadsActive"
+        case .settings:
+            return "TabSettingsActive"
+        }
+    }
+
+    var fallbackSystemImage: String {
+        switch self {
+        case .home:
+            return "house"
+        case .library:
+            return "film"
+        case .downloads:
+            return "arrow.down.circle"
+        case .settings:
+            return "gearshape"
         }
     }
 }
