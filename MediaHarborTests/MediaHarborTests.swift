@@ -5,6 +5,7 @@
 //  Created by mamingkang on 2026/3/24.
 //
 
+import Foundation
 import Testing
 @testable import MediaHarbor
 
@@ -123,6 +124,46 @@ struct MediaHarborTests {
     }
 
     @Test
+    func jellyfinRefreshableConsoleLibrariesHideAdminOnlyLibrariesWithoutUserAccess() async throws {
+        let adminLibraries = [
+            JellyfinLibrary(
+                id: "hidden-library",
+                name: "小姐姐之家1",
+                collectionType: nil,
+                itemCount: nil,
+                type: "CollectionFolder",
+                isFolder: true
+            ),
+            JellyfinLibrary(
+                id: "movies",
+                name: "电影",
+                collectionType: "movies",
+                itemCount: 12,
+                type: "CollectionFolder",
+                isFolder: true
+            ),
+        ]
+        let userVisibleLibraries = [
+            JellyfinLibrary(
+                id: "movies",
+                name: "电影",
+                collectionType: "movies",
+                itemCount: 12,
+                type: "CollectionFolder",
+                isFolder: true
+            ),
+        ]
+
+        let filtered = JellyfinLibrary.refreshableConsoleLibraries(
+            managedLibraries: adminLibraries,
+            userVisibleLibraries: userVisibleLibraries,
+            source: .administrator
+        )
+
+        #expect(filtered.map(\.id) == ["movies"])
+    }
+
+    @Test
     func jellyfinSessionAccountKeyOnlyDeduplicatesSameServerAndSameUser() async throws {
         let sameServerDifferentUser = JellyfinSessionSnapshot(
             serverURLString: "http://media.example:8096",
@@ -185,6 +226,177 @@ struct MediaHarborTests {
 
         #expect(runningTask.progressText == nil)
         #expect(clampedTask.progressText == "100%")
+    }
+
+    @Test
+    func jellyfinWebDetailsURLUsesCurrentWebRoute() async throws {
+        let client = JellyfinAPIClient()
+        let baseURL = try #require(URL(string: "http://router.mingkang.uk:8096"))
+        let url = client.webDetailsURL(baseURL: baseURL, itemID: "12345")
+
+        #expect(url?.absoluteString == "http://router.mingkang.uk:8096/web/index.html#/details?id=12345")
+    }
+
+    @Test
+    func jellyfinDirectVideoURLIncludesStaticFlagAndToken() async throws {
+        let client = JellyfinAPIClient()
+        let baseURL = try #require(URL(string: "http://router.mingkang.uk:8096"))
+        let url = client.directVideoURL(baseURL: baseURL, itemID: "abc", token: "token-1")
+
+        #expect(url?.absoluteString == "http://router.mingkang.uk:8096/Videos/abc/stream?static=true&api_key=token-1")
+    }
+
+    @Test
+    func jellyfinPlaybackPreferencesDefaultToAppPlayback() async throws {
+        let suiteName = "MediaHarborTests.JellyfinPlaybackPreferences"
+        let defaults = try #require(UserDefaults(suiteName: suiteName))
+        defaults.removePersistentDomain(forName: suiteName)
+
+        let preferences = await MainActor.run {
+            let isolatedDefaults = UserDefaults(suiteName: suiteName)!
+            return JellyfinPlaybackPreferences(defaults: isolatedDefaults)
+        }
+
+        #expect(await MainActor.run { preferences.preferredOpenTarget } == .app)
+    }
+
+    @Test
+    func jellyfinLibraryItemKindRecognizesSeasonAndEpisodeTypes() async throws {
+        #expect(JellyfinLibraryItemKind(type: "Season", isFolder: true) == .season)
+        #expect(JellyfinLibraryItemKind(type: "Episode", isFolder: false) == .episode)
+    }
+
+    @Test
+    func jellyfinGenericServerProcessingMessageMapsToActionableLoginError() async throws {
+        let apiError = JellyfinAPIClient.APIError.serverMessage("Error processing request.")
+        let message = await MainActor.run {
+            JellyfinStore.connectionErrorMessage(for: apiError)
+        }
+
+        #expect(apiError.isGenericServerProcessingMessage)
+        #expect(message.contains("登录请求"))
+        #expect(message.contains("Jellyfin 网页"))
+    }
+
+    @Test
+    func browserDefaultSitesKeepMoviePilotMTeamAndHDKyl() async throws {
+        let sites = BrowserSite.defaultSites()
+
+        #expect(sites.map(\.id) == [
+            BrowserSite.moviePilotID,
+            BrowserSite.mTeamID,
+            BrowserSite.hdkylID,
+        ])
+        #expect(sites.allSatisfy { $0.isVisible })
+        #expect(sites.first(where: { $0.id == BrowserSite.mTeamID })?.homeURLString == "https://h5.m-team.cc/")
+    }
+
+    @Test
+    func browserStoredSitesPreserveCustomOrderAndAppendMissingBuiltins() async throws {
+        let customSite = BrowserSite(
+            id: "custom-1",
+            title: "自定义站点",
+            homeURLString: "https://example.com",
+            kind: .customPT,
+            isBuiltin: false,
+            isVisible: true
+        )
+        let storedSites = [
+            BrowserSite(
+                id: BrowserSite.hdkylID,
+                title: "HDKyl",
+                homeURLString: "https://www.hdkyl.in/",
+                kind: .hdkyl,
+                isBuiltin: true,
+                isVisible: true
+            ),
+            customSite,
+            BrowserSite(
+                id: BrowserSite.mTeamID,
+                title: "M-Team",
+                homeURLString: "https://h5.m-team.cc/",
+                kind: .mTeam,
+                isBuiltin: true,
+                isVisible: true
+            ),
+        ]
+
+        let merged = BrowserSite.mergedStoredSitesPreservingOrder(storedSites)
+
+        #expect(merged.map(\.id) == [
+            BrowserSite.hdkylID,
+            "custom-1",
+            BrowserSite.mTeamID,
+            BrowserSite.moviePilotID,
+        ])
+    }
+
+    @Test
+    func browserNormalizeAddressAddsHTTPSWhenSchemeMissing() async throws {
+        let url = BrowserSite.normalizeAddress("www.hdkyl.in")
+
+        #expect(url?.absoluteString == "https://www.hdkyl.in")
+    }
+
+    @Test
+    func browserMTeamTorrentIdentifierParsingSupportsCommonURLShapes() async throws {
+        let resolver = BrowserPTResourceResolver()
+        let detailsPHPResource = BrowserResource(
+            id: "1",
+            title: "A",
+            subtitle: nil,
+            detailsURLString: "https://kp.m-team.cc/details.php?id=349061",
+            downloadURLString: nil,
+            imageURLString: nil,
+            torrentID: nil
+        )
+        let hashRouteResource = BrowserResource(
+            id: "2",
+            title: "B",
+            subtitle: nil,
+            detailsURLString: "https://h5.m-team.cc/#/349061",
+            downloadURLString: nil,
+            imageURLString: nil,
+            torrentID: nil
+        )
+
+        #expect(resolver.extractTorrentID(from: detailsPHPResource) == "349061")
+        #expect(resolver.extractTorrentID(from: hashRouteResource) == "349061")
+    }
+
+    @Test
+    func browserMTeamTorrentIdentifierParsingRejectsUserProfileLikeURLs() async throws {
+        let resolver = BrowserPTResourceResolver()
+        let userProfileResource = BrowserResource(
+            id: "1",
+            title: "mmk",
+            subtitle: nil,
+            detailsURLString: "https://kp.m-team.cc/userdetails.php?id=123456",
+            downloadURLString: nil,
+            imageURLString: nil,
+            torrentID: nil
+        )
+        let genericProfileRoute = BrowserResource(
+            id: "2",
+            title: "profile",
+            subtitle: nil,
+            detailsURLString: "https://h5.m-team.cc/#/profile?id=123456",
+            downloadURLString: nil,
+            imageURLString: nil,
+            torrentID: nil
+        )
+
+        #expect(resolver.extractTorrentID(from: userProfileResource) == nil)
+        #expect(resolver.extractTorrentID(from: genericProfileRoute) == nil)
+    }
+
+    @Test
+    func qbRemoteAddOutcomeMessagesMatchOutcomeKind() async throws {
+        let duplicateOutcome = QBittorrentRemoteAddOutcome(kind: .duplicateLike, attemptedCount: 2, addedCount: 0)
+        let partialOutcome = QBittorrentRemoteAddOutcome(kind: .partial, attemptedCount: 3, addedCount: 1)
+
+        #expect(duplicateOutcome.message == "qBittorrent 没有新增任务，这些资源可能已经存在。")
+        #expect(partialOutcome.message == "qBittorrent 只新增了 1/3 个任务，其余资源可能已存在。")
     }
 
 }

@@ -87,6 +87,45 @@ struct SettingsView: View {
                     }
                 }
 
+                Section("浏览器") {
+                    Toggle(
+                        "显示浏览器 Tab",
+                        isOn: Binding(
+                            get: { appState.browser.isEnabled },
+                            set: {
+                                appState.browser.setEnabled($0)
+                                if $0 == false, appState.selectedTab == .browser {
+                                    appState.selectedTab = .library
+                                }
+                            }
+                        )
+                    )
+
+                    NavigationLink("浏览器与 PT 站点") {
+                        BrowserSettingsView()
+                    }
+
+                    Button("打开浏览器") {
+                        appState.selectedTab = .browser
+                    }
+                    .disabled(appState.browser.isEnabled == false)
+                }
+
+                Section("外部播放") {
+                    Picker("默认打开方式", selection: Binding(
+                        get: { appState.jellyfinPlaybackPreferences.preferredOpenTarget },
+                        set: { appState.jellyfinPlaybackPreferences.preferredOpenTarget = $0 }
+                    )) {
+                        ForEach(JellyfinPlaybackOpenTarget.allCases) { target in
+                            Text(target.title)
+                                .tag(target)
+                        }
+                    }
+
+                    Text("默认值现在是 App 内播放。电影和可播放剧集会按这里的默认方式显示主操作卡片；电视剧本身会优先保留应用内选集，再把网页、Infuse、VidHub 作为备选。切换默认方式只会更新卡片样式，不会立即跳转或播放。")
+                        .foregroundStyle(.secondary)
+                }
+
                 Section("构建说明") {
                     Text("当前这版已经把 Jellyfin 和 qBittorrent 的基础链路接起来了，目标是先让 NAS 上最常用的管理动作都能在 iPhone 上跑通。")
                     Text("Debug 构建对本地网络测试更友好。等准备公开发布前，我们再继续收紧 ATS、补播放入口，并把下载器能力继续做细。")

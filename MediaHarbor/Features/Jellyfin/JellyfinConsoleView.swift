@@ -42,9 +42,9 @@ struct JellyfinConsoleView: View {
                     EmptyStateCard(
                         title: "请先连接 Jellyfin",
                         message: "MediaHarbor 登录到你的 Jellyfin 服务器后，管理控制台才会可用。",
-                        buttonTitle: "回到首页",
+                        buttonTitle: "回到媒体库",
                         action: {
-                            appState.selectedTab = .home
+                            appState.selectedTab = .library
                         }
                     )
                 }
@@ -175,7 +175,14 @@ struct JellyfinConsoleView: View {
                 )
             }
 
-            if jellyfin.managedLibraries.isEmpty {
+            if jellyfin.hiddenManagedLibraryCount > 0 {
+                JellyfinInfoNote(
+                    title: "已隐藏的后台媒体库",
+                    message: "有 \(jellyfin.hiddenManagedLibraryCount) 个后台媒体库当前账号可以做全库扫描，但不能稳定单独刷新，所以这里不再列出。需要处理它们时，请使用“扫描所有媒体库”。"
+                )
+            }
+
+            if jellyfin.refreshableManagedLibraries.isEmpty {
                 if jellyfin.isRefreshing || jellyfin.isLoadingConsole {
                     ProgressView("正在载入媒体库...")
                         .frame(maxWidth: .infinity, alignment: .center)
@@ -188,7 +195,7 @@ struct JellyfinConsoleView: View {
                 }
             } else {
                 LazyVStack(spacing: 12) {
-                    ForEach(jellyfin.managedLibraries) { library in
+                    ForEach(jellyfin.refreshableManagedLibraries) { library in
                         JellyfinManagedLibraryRow(
                             library: library,
                             isRefreshing: jellyfin.refreshingLibraryID == library.id,

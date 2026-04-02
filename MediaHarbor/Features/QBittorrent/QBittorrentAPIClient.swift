@@ -3,6 +3,12 @@ import Foundation
 struct QBittorrentDashboard: Sendable {
     let transferInfo: QBittorrentTransferInfo
     let torrents: [QBTorrent]
+    let categories: [QBTorrentCategory]
+}
+
+struct QBittorrentAddResponse: Equatable, Sendable {
+    let accepted: Bool
+    let rawMessage: String
 }
 
 struct QBittorrentAPIClient {
@@ -74,10 +80,67 @@ struct QBittorrentAPIClient {
             sortKey: sortKey,
             sortDirection: sortDirection
         )
+        async let fetchedCategories = categories(baseURL: baseURL)
 
         return QBittorrentDashboard(
             transferInfo: try await fetchedTransferInfo,
-            torrents: try await fetchedTorrents
+            torrents: try await fetchedTorrents,
+            categories: try await fetchedCategories
+        )
+    }
+
+    func categories(baseURL: URL, username: String, password: String) async throws -> [QBTorrentCategory] {
+        try await authenticate(baseURL: baseURL, username: username, password: password)
+        return try await categories(baseURL: baseURL)
+    }
+
+    func addURLs(
+        baseURL: URL,
+        username: String,
+        password: String,
+        urls: [URL],
+        category: String?,
+        savePath: String?,
+        cookieHeader: String?
+    ) async throws -> QBittorrentAddResponse {
+        try await authenticate(baseURL: baseURL, username: username, password: password)
+
+        let joinedURLs = urls.map(\.absoluteString).joined(separator: "\n")
+        guard joinedURLs.isEmpty == false else {
+            throw APIError.serverMessage("没有可发送到 qBittorrent 的下载地址。")
+        }
+
+        var formItems = [
+            URLQueryItem(name: "urls", value: joinedURLs),
+        ]
+
+        let trimmedCategory = category?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        if trimmedCategory.isEmpty == false {
+            formItems.append(URLQueryItem(name: "category", value: trimmedCategory))
+            formItems.append(URLQueryItem(name: "autoTMM", value: "true"))
+        }
+
+        let trimmedSavePath = savePath?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        if trimmedSavePath.isEmpty == false {
+            formItems.append(URLQueryItem(name: "savepath", value: trimmedSavePath))
+        }
+
+        let trimmedCookieHeader = cookieHeader?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        if trimmedCookieHeader.isEmpty == false {
+            formItems.append(URLQueryItem(name: "cookie", value: trimmedCookieHeader))
+        }
+
+        let request = try makeRequest(
+            baseURL: baseURL,
+            path: "api/v2/torrents/add",
+            method: "POST",
+            formItems: formItems
+        )
+
+        let rawMessage = try await sendText(request).trimmingCharacters(in: .whitespacesAndNewlines)
+        return QBittorrentAddResponse(
+            accepted: rawMessage.caseInsensitiveCompare("ok.") == .orderedSame,
+            rawMessage: rawMessage
         )
     }
 
@@ -148,6 +211,22 @@ struct QBittorrentAPIClient {
         let request = try makeRequest(baseURL: baseURL, path: "api/v2/transfer/info")
         let dto: QBittorrentTransferInfoDTO = try await send(request)
         return dto.asTransferInfo
+    }
+
+    private func categories(baseURL: URL) async throws -> [QBTorrentCategory] {
+        let request = try makeRequest(baseURL: baseURL, path: "api/v2/torrents/categories")
+        let dto: [String: QBittorrentCategoryDTO] = try await send(request)
+
+        return dto
+            .map { key, value in
+                QBTorrentCategory(
+                    name: key,
+                    savePath: value.savePath ?? ""
+                )
+            }
+            .sorted {
+                $0.name.localizedStandardCompare($1.name) == .orderedAscending
+            }
     }
 
     private func torrents(
@@ -376,5 +455,13 @@ private struct QBTorrentDTO: Decodable {
             savePath: savePath ?? "",
             addedOn: addedOn.map { Date(timeIntervalSince1970: TimeInterval($0)) }
         )
+    }
+}
+
+private struct QBittorrentCategoryDTO: Decodable {
+    let savePath: String?
+
+    enum CodingKeys: String, CodingKey {
+        case savePath = "savePath"
     }
 }

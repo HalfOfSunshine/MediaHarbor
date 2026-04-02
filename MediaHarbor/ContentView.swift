@@ -8,17 +8,19 @@ struct ContentView: View {
         @Bindable var appState = appState
 
         TabView(selection: $appState.selectedTab) {
-            HomeView()
-                .tabItem {
-                    tabBarItem(for: .home)
-                }
-                .tag(AppTab.home)
-
             LibraryView()
                 .tabItem {
                     tabBarItem(for: .library)
                 }
                 .tag(AppTab.library)
+
+            if appState.browser.isEnabled {
+                BrowserView()
+                    .tabItem {
+                        tabBarItem(for: .browser)
+                    }
+                    .tag(AppTab.browser)
+            }
 
             DownloadsView()
                 .tabItem {

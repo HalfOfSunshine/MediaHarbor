@@ -9,6 +9,10 @@ final class JellyfinStore {
     var libraries: [JellyfinLibrary] = []
     var managedLibraries: [JellyfinLibrary] = []
     var recentMovies: [JellyfinMovie] = []
+    var resumeItems: [JellyfinLibraryItem] = []
+    var nextUpItems: [JellyfinLibraryItem] = []
+    var favoriteItems: [JellyfinLibraryItem] = []
+    var searchResults: [JellyfinLibraryItem] = []
     var libraryItems: [JellyfinLibraryItem] = []
     var scheduledTasks: [JellyfinTask] = []
     var selectedLibraryID: String?
@@ -16,16 +20,19 @@ final class JellyfinStore {
     var errorMessage: String?
     var libraryErrorMessage: String?
     var libraryNoticeMessage: String?
+    var searchErrorMessage: String?
     var consoleErrorMessage: String?
     var consoleNotice: String?
     var isConnecting = false
     var isRefreshing = false
     var isLoadingLibrary = false
+    var isSearching = false
     var isLoadingConsole = false
     var isStartingLibraryScan = false
     var isRefreshingSingleLibrary = false
     var isStoppingLibraryScan = false
     var refreshingLibraryID: String?
+    var favoriteActionItemID: String?
 
     @ObservationIgnored
     private let sessionStore: JellyfinSessionStore
@@ -35,6 +42,9 @@ final class JellyfinStore {
 
     @ObservationIgnored
     private var lastLoadedLibraryKey: String?
+
+    @ObservationIgnored
+    private var lastSearchTerm: String = ""
 
     init(
         sessionStore: JellyfinSessionStore = JellyfinSessionStore(),
@@ -72,6 +82,18 @@ final class JellyfinStore {
         scheduledTasks.first(where: \.isLibraryScanTask)
     }
 
+    var refreshableManagedLibraries: [JellyfinLibrary] {
+        JellyfinLibrary.refreshableConsoleLibraries(
+            managedLibraries: managedLibraries,
+            userVisibleLibraries: libraries,
+            source: consoleLibrarySource
+        )
+    }
+
+    var hiddenManagedLibraryCount: Int {
+        max(managedLibraries.count - refreshableManagedLibraries.count, 0)
+    }
+
     func connect(serverURLString: String, username: String, password: String) async -> Bool {
         guard isConnecting == false else {
             return false
@@ -83,9 +105,8 @@ final class JellyfinStore {
         }
 
         let trimmedUsername = username.trimmingCharacters(in: .whitespacesAndNewlines)
-        let trimmedPassword = password.trimmingCharacters(in: .whitespacesAndNewlines)
 
-        guard trimmedUsername.isEmpty == false, trimmedPassword.isEmpty == false else {
+        guard trimmedUsername.isEmpty == false, password.isEmpty == false else {
             errorMessage = "用户名和密码不能为空。"
             return false
         }
@@ -98,17 +119,17 @@ final class JellyfinStore {
         }
 
         do {
-            let publicInfo = try await apiClient.publicInfo(baseURL: baseURL)
             let authenticated = try await apiClient.authenticate(
                 baseURL: baseURL,
                 username: trimmedUsername,
-                password: trimmedPassword
+                password: password
             )
+            let publicInfo = try? await apiClient.publicInfo(baseURL: baseURL)
 
             let snapshot = JellyfinSessionSnapshot(
                 serverURLString: baseURL.absoluteString,
-                serverName: publicInfo.serverName,
-                serverVersion: publicInfo.version,
+                serverName: publicInfo?.serverName ?? baseURL.host ?? "Jellyfin",
+                serverVersion: publicInfo?.version,
                 username: authenticated.username,
                 userID: authenticated.userID
             )
@@ -116,16 +137,13 @@ final class JellyfinStore {
             try sessionStore.save(session: snapshot, accessToken: authenticated.accessToken)
             activateSession(snapshot)
             reloadSavedSessions()
-            await refreshDashboard(forceReloadLibrary: true)
-            await refreshConsole()
+            Task {
+                await refreshDashboard(forceReloadLibrary: true, showErrors: false)
+                await refreshConsole(showErrors: false)
+            }
             return true
         } catch let apiError as JellyfinAPIClient.APIError {
-            switch apiError {
-            case .unauthorized, .forbidden:
-                errorMessage = "登录失败，请检查用户名和密码；如果账号本身没问题，也请确认它允许通过当前网络访问 Jellyfin。"
-            default:
-                errorMessage = apiError.localizedDescription
-            }
+            errorMessage = Self.connectionErrorMessage(for: apiError)
             return false
         } catch {
             errorMessage = error.localizedDescription
@@ -170,7 +188,7 @@ final class JellyfinStore {
         }
     }
 
-    func refreshDashboard(forceReloadLibrary: Bool = false) async {
+    func refreshDashboard(forceReloadLibrary: Bool = false, showErrors: Bool = true) async {
         guard isRefreshing == false else {
             return
         }
@@ -198,12 +216,33 @@ final class JellyfinStore {
                 userID: context.session.userID,
                 token: context.accessToken
             )
+            async let fetchedResumeItems = apiClient.resumeItems(
+                baseURL: context.baseURL,
+                userID: context.session.userID,
+                token: context.accessToken
+            )
+            async let fetchedNextUpItems = apiClient.nextUpItems(
+                baseURL: context.baseURL,
+                userID: context.session.userID,
+                token: context.accessToken
+            )
+            async let fetchedFavoriteItems = apiClient.favoriteItems(
+                baseURL: context.baseURL,
+                userID: context.session.userID,
+                token: context.accessToken
+            )
 
             let availableLibraries = JellyfinLibrary.mediaLibraries(from: try await fetchedLibraries)
             let latestMovies = try await fetchedRecentMovies
+            let resumeItems = try await fetchedResumeItems
+            let nextUpItems = try await fetchedNextUpItems
+            let favoriteItems = try await fetchedFavoriteItems
 
             libraries = availableLibraries
             recentMovies = latestMovies
+            self.resumeItems = resumeItems
+            self.nextUpItems = nextUpItems
+            self.favoriteItems = favoriteItems
 
             if availableLibraries.contains(where: { $0.id == selectedLibraryID }) == false {
                 selectedLibraryID = availableLibraries.first?.id
@@ -213,11 +252,13 @@ final class JellyfinStore {
                 lastLoadedLibraryKey = nil
             }
         } catch {
-            handle(error)
+            if showErrors {
+                handle(error)
+            }
         }
     }
 
-    func refreshConsole() async {
+    func refreshConsole(showErrors: Bool = true) async {
         guard isLoadingConsole == false else {
             return
         }
@@ -250,7 +291,9 @@ final class JellyfinStore {
             managedLibraries = consoleLibraries.libraries
             consoleLibrarySource = consoleLibraries.source
         } catch {
-            handleConsole(error)
+            if showErrors {
+                handleConsole(error)
+            }
         }
     }
 
@@ -300,6 +343,53 @@ final class JellyfinStore {
         }
     }
 
+    func searchItems(_ term: String) async {
+        let trimmedTerm = term.trimmingCharacters(in: .whitespacesAndNewlines)
+
+        guard trimmedTerm.isEmpty == false else {
+            searchResults = []
+            searchErrorMessage = nil
+            isSearching = false
+            lastSearchTerm = ""
+            return
+        }
+
+        guard let context = activeContext() else {
+            disconnect()
+            return
+        }
+
+        lastSearchTerm = trimmedTerm
+        isSearching = true
+        searchErrorMessage = nil
+
+        do {
+            let results = try await apiClient.searchItems(
+                baseURL: context.baseURL,
+                userID: context.session.userID,
+                token: context.accessToken,
+                searchTerm: trimmedTerm
+            )
+
+            guard lastSearchTerm == trimmedTerm else {
+                return
+            }
+
+            searchResults = results
+        } catch {
+            guard lastSearchTerm == trimmedTerm else {
+                return
+            }
+
+            searchResults = []
+            searchErrorMessage = error.localizedDescription
+        }
+
+        if lastSearchTerm == trimmedTerm {
+            isSearching = false
+        }
+    }
+
     func selectLibrary(_ identifier: String) {
         guard selectedLibraryID != identifier else {
             return
@@ -316,6 +406,12 @@ final class JellyfinStore {
 
         guard let context = activeContext() else {
             disconnect()
+            return
+        }
+
+        guard refreshableManagedLibraries.contains(where: { $0.id == library.id }) else {
+            libraryErrorMessage = "这个媒体库当前不能单独刷新。请使用“扫描所有媒体库”。"
+            libraryNoticeMessage = nil
             return
         }
 
@@ -347,6 +443,93 @@ final class JellyfinStore {
 
     func primaryImageURL(for item: JellyfinLibraryItem, maxWidth: Int = 720, maxHeight: Int = 1080) -> URL? {
         primaryImageURL(itemID: item.id, tag: item.primaryImageTag, maxWidth: maxWidth, maxHeight: maxHeight)
+    }
+
+    func setFavorite(itemID: String, isFavorite: Bool) async throws {
+        guard let context = activeContext() else {
+            disconnect()
+            throw JellyfinAPIClient.APIError.unauthorized
+        }
+
+        favoriteActionItemID = itemID
+        defer {
+            if favoriteActionItemID == itemID {
+                favoriteActionItemID = nil
+            }
+        }
+
+        try await apiClient.setFavorite(
+            baseURL: context.baseURL,
+            userID: context.session.userID,
+            token: context.accessToken,
+            itemID: itemID,
+            isFavorite: isFavorite
+        )
+
+        updateFavoriteState(itemID: itemID, isFavorite: isFavorite)
+    }
+
+    func webDetailsURL(for itemID: String) -> URL? {
+        guard let context = activeContext() else {
+            return nil
+        }
+
+        return apiClient.webDetailsURL(baseURL: context.baseURL, itemID: itemID)
+    }
+
+    func directVideoURL(for itemID: String) -> URL? {
+        guard let context = activeContext() else {
+            return nil
+        }
+
+        return apiClient.directVideoURL(baseURL: context.baseURL, itemID: itemID, token: context.accessToken)
+    }
+
+    func playbackStream(for itemID: String) async throws -> JellyfinPlaybackStream {
+        guard let context = activeContext() else {
+            disconnect()
+            throw JellyfinAPIClient.APIError.unauthorized
+        }
+
+        return try await apiClient.playbackStream(
+            baseURL: context.baseURL,
+            userID: context.session.userID,
+            token: context.accessToken,
+            itemID: itemID
+        )
+    }
+
+    func childItems(for item: JellyfinLibraryItem) async throws -> [JellyfinLibraryItem] {
+        guard let context = activeContext() else {
+            disconnect()
+            throw JellyfinAPIClient.APIError.unauthorized
+        }
+
+        let includeItemTypes: String?
+        let recursive: Bool
+
+        switch item.kind {
+        case .series:
+            includeItemTypes = "Episode"
+            recursive = true
+        case .season:
+            includeItemTypes = "Episode"
+            recursive = false
+        case .folder:
+            includeItemTypes = "Series,Movie"
+            recursive = false
+        case .movie, .episode, .other:
+            return []
+        }
+
+        return try await apiClient.childItems(
+            baseURL: context.baseURL,
+            userID: context.session.userID,
+            token: context.accessToken,
+            parentID: item.id,
+            recursive: recursive,
+            includeItemTypes: includeItemTypes
+        )
     }
 
     func disconnect() {
@@ -447,10 +630,29 @@ final class JellyfinStore {
         savedSessions = sessionStore.loadSessions()
     }
 
+    static func connectionErrorMessage(for apiError: JellyfinAPIClient.APIError) -> String {
+        switch apiError {
+        case .unauthorized, .forbidden:
+            return "登录失败，请检查用户名和密码；如果账号本身没问题，也请确认它允许通过当前网络访问 Jellyfin。"
+        case .invalidResponse:
+            return "Jellyfin 服务器返回了无法识别的登录响应。请先确认这个账号在 Jellyfin 网页里能正常登录。"
+        case .missingAuthentication:
+            return "Jellyfin 登录成功了，但服务器没有返回有效的访问令牌。"
+        case .serverMessage where apiError.isGenericServerProcessingMessage:
+            return "Jellyfin 在处理登录请求时返回了服务器错误。请先在 Jellyfin 网页里确认这个账号能否正常登录；如果网页也失败，需要在服务器端排查该账号。"
+        default:
+            return apiError.localizedDescription
+        }
+    }
+
     private func clearRuntimeState() {
         libraries = []
         managedLibraries = []
         recentMovies = []
+        resumeItems = []
+        nextUpItems = []
+        favoriteItems = []
+        searchResults = []
         libraryItems = []
         scheduledTasks = []
         selectedLibraryID = nil
@@ -458,10 +660,14 @@ final class JellyfinStore {
         errorMessage = nil
         libraryErrorMessage = nil
         libraryNoticeMessage = nil
+        searchErrorMessage = nil
         consoleErrorMessage = nil
         consoleNotice = nil
         lastLoadedLibraryKey = nil
+        lastSearchTerm = ""
         refreshingLibraryID = nil
+        favoriteActionItemID = nil
+        isSearching = false
     }
 
     private func primaryImageURL(itemID: String, tag: String?, maxWidth: Int, maxHeight: Int) -> URL? {
@@ -523,5 +729,33 @@ final class JellyfinStore {
         }
 
         consoleErrorMessage = error.localizedDescription
+    }
+
+    private func updateFavoriteState(itemID: String, isFavorite: Bool) {
+        recentMovies = recentMovies.map { movie in
+            guard movie.id == itemID else { return movie }
+            return movie.updatingFavorite(isFavorite)
+        }
+        libraryItems = libraryItems.map { item in
+            guard item.id == itemID else { return item }
+            return item.updatingFavorite(isFavorite)
+        }
+        resumeItems = resumeItems.map { item in
+            guard item.id == itemID else { return item }
+            return item.updatingFavorite(isFavorite)
+        }
+        nextUpItems = nextUpItems.map { item in
+            guard item.id == itemID else { return item }
+            return item.updatingFavorite(isFavorite)
+        }
+        favoriteItems = isFavorite
+            ? favoriteItems
+            : favoriteItems.filter { $0.id != itemID }
+
+        if isFavorite, let inserted = libraryItems.first(where: { $0.id == itemID }) {
+            if favoriteItems.contains(where: { $0.id == itemID }) == false {
+                favoriteItems.insert(inserted.updatingFavorite(true), at: 0)
+            }
+        }
     }
 }

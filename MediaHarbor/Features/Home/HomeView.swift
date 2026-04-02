@@ -5,6 +5,7 @@ struct HomeView: View {
 
     @State private var isPresentingConnectSheet = false
     @State private var selectedMovie: JellyfinMovie?
+    @State private var selectedLibraryItem: JellyfinLibraryItem?
 
     var body: some View {
         NavigationStack {
@@ -78,6 +79,66 @@ struct HomeView: View {
                                 .padding(.vertical, 4)
                             }
                         }
+
+                        sectionHeader("继续播放")
+
+                        if jellyfin.resumeItems.isEmpty {
+                            JellyfinInfoNote(title: "继续播放", message: "Jellyfin 还没有返回带播放进度的条目。等你开始观看后，这里会显示续播入口。")
+                        } else {
+                            ScrollView(.horizontal, showsIndicators: false) {
+                                HStack(spacing: 14) {
+                                    ForEach(jellyfin.resumeItems) { item in
+                                        Button {
+                                            selectedLibraryItem = item
+                                        } label: {
+                                            JellyfinLibraryItemCard(item: item)
+                                        }
+                                        .buttonStyle(.plain)
+                                    }
+                                }
+                                .padding(.vertical, 4)
+                            }
+                        }
+
+                        sectionHeader("接下来观看")
+
+                        if jellyfin.nextUpItems.isEmpty {
+                            JellyfinInfoNote(title: "接下来观看", message: "如果你在追剧，Jellyfin 会在这里返回下一集。")
+                        } else {
+                            ScrollView(.horizontal, showsIndicators: false) {
+                                HStack(spacing: 14) {
+                                    ForEach(jellyfin.nextUpItems) { item in
+                                        Button {
+                                            selectedLibraryItem = item
+                                        } label: {
+                                            JellyfinLibraryItemCard(item: item)
+                                        }
+                                        .buttonStyle(.plain)
+                                    }
+                                }
+                                .padding(.vertical, 4)
+                            }
+                        }
+
+                        sectionHeader("喜欢 / 收藏")
+
+                        if jellyfin.favoriteItems.isEmpty {
+                            JellyfinInfoNote(title: "喜欢 / 收藏", message: "你在详情页点过心形按钮后，这里会聚合显示喜欢的电影、剧集或单集。")
+                        } else {
+                            ScrollView(.horizontal, showsIndicators: false) {
+                                HStack(spacing: 14) {
+                                    ForEach(jellyfin.favoriteItems) { item in
+                                        Button {
+                                            selectedLibraryItem = item
+                                        } label: {
+                                            JellyfinLibraryItemCard(item: item)
+                                        }
+                                        .buttonStyle(.plain)
+                                    }
+                                }
+                                .padding(.vertical, 4)
+                            }
+                        }
                     } else {
                         EmptyStateCard(
                             title: "连接你的 Jellyfin 服务器",
@@ -111,6 +172,11 @@ struct HomeView: View {
             .sheet(item: $selectedMovie) { movie in
                 NavigationStack {
                     JellyfinMovieDetailView(movie: movie)
+                }
+            }
+            .sheet(item: $selectedLibraryItem) { item in
+                NavigationStack {
+                    JellyfinLibraryItemDetailView(item: item)
                 }
             }
         }

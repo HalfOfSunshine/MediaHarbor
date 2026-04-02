@@ -7,10 +7,12 @@ final class QBittorrentStore {
     var session: QBittorrentSessionSnapshot?
     var transferInfo: QBittorrentTransferInfo?
     var torrents: [QBTorrent] = []
+    var categories: [QBTorrentCategory] = []
     var errorMessage: String?
     var noticeMessage: String?
     var isConnecting = false
     var isRefreshing = false
+    var isAddingRemoteDownloads = false
     var actingTorrentHash: String?
     var deletingTorrentHash: String?
     var sortKey: QBittorrentTorrentSortKey = .addedOn
@@ -113,6 +115,7 @@ final class QBittorrentStore {
 
             transferInfo = dashboard.transferInfo
             torrents = dashboard.torrents
+            categories = dashboard.categories
         } catch {
             handle(error)
         }
@@ -214,6 +217,110 @@ final class QBittorrentStore {
         clearRuntimeState()
     }
 
+    func refreshCategories() async {
+        guard let context = activeContext() else {
+            errorMessage = "还没有保存 qBittorrent 登录信息。"
+            return
+        }
+
+        do {
+            categories = try await apiClient.categories(
+                baseURL: context.baseURL,
+                username: context.session.username,
+                password: context.password
+            )
+        } catch {
+            handle(error)
+        }
+    }
+
+    func addRemoteDownloads(
+        urls: [URL],
+        category: String?,
+        savePath: String?,
+        cookieHeader: String?
+    ) async -> QBittorrentRemoteAddOutcome {
+        guard isAddingRemoteDownloads == false else {
+            return QBittorrentRemoteAddOutcome(
+                kind: .failed,
+                attemptedCount: urls.count,
+                addedCount: 0
+            )
+        }
+
+        guard let context = activeContext() else {
+            errorMessage = "还没有保存 qBittorrent 登录信息。"
+            return QBittorrentRemoteAddOutcome(
+                kind: .failed,
+                attemptedCount: urls.count,
+                addedCount: 0
+            )
+        }
+
+        let validURLs = Array(Set(urls))
+        let beforeHashes = Set(torrents.map(\.hash))
+
+        isAddingRemoteDownloads = true
+        defer {
+            isAddingRemoteDownloads = false
+        }
+
+        do {
+            let response = try await apiClient.addURLs(
+                baseURL: context.baseURL,
+                username: context.session.username,
+                password: context.password,
+                urls: validURLs,
+                category: category,
+                savePath: savePath,
+                cookieHeader: cookieHeader
+            )
+
+            guard response.accepted else {
+                let message = response.rawMessage.isEmpty ? "qBittorrent 拒绝了这次添加请求。" : response.rawMessage
+                errorMessage = message
+                return QBittorrentRemoteAddOutcome(
+                    kind: .failed,
+                    attemptedCount: validURLs.count,
+                    addedCount: 0
+                )
+            }
+
+            var addedCount = 0
+            for attempt in 0 ..< 3 {
+                await refresh()
+                let currentAddedCount = Set(torrents.map(\.hash)).subtracting(beforeHashes).count
+                addedCount = currentAddedCount
+
+                if addedCount > 0 || attempt == 2 {
+                    break
+                }
+
+                try? await Task.sleep(for: .milliseconds(500))
+            }
+
+            let outcome: QBittorrentRemoteAddOutcome
+            switch addedCount {
+            case let count where count >= validURLs.count:
+                outcome = QBittorrentRemoteAddOutcome(kind: .added, attemptedCount: validURLs.count, addedCount: count)
+            case 0:
+                outcome = QBittorrentRemoteAddOutcome(kind: .duplicateLike, attemptedCount: validURLs.count, addedCount: 0)
+            default:
+                outcome = QBittorrentRemoteAddOutcome(kind: .partial, attemptedCount: validURLs.count, addedCount: addedCount)
+            }
+
+            noticeMessage = outcome.message
+            return outcome
+        } catch {
+            handle(error)
+            return QBittorrentRemoteAddOutcome(
+                kind: .failed,
+                attemptedCount: validURLs.count,
+                addedCount: 0
+            )
+        }
+    }
+
     private func activeContext() -> (session: QBittorrentSessionSnapshot, baseURL: URL, password: String)? {
         guard let session,
               let baseURL = URL(string: session.serverURLString),
@@ -228,8 +335,10 @@ final class QBittorrentStore {
         session = nil
         transferInfo = nil
         torrents = []
+        categories = []
         errorMessage = nil
         noticeMessage = nil
+        isAddingRemoteDownloads = false
         actingTorrentHash = nil
         deletingTorrentHash = nil
     }

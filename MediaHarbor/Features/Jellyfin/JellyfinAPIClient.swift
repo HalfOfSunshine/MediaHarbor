@@ -7,6 +7,11 @@ struct JellyfinAuthenticatedIdentity: Sendable {
     let username: String
 }
 
+struct JellyfinPlaybackStream: Sendable {
+    let url: URL
+    let routeDescription: String
+}
+
 struct JellyfinAPIClient {
     enum APIError: LocalizedError {
         case invalidServerURL
@@ -146,6 +151,95 @@ struct JellyfinAPIClient {
         return dto.compactMap(\.asMovie)
     }
 
+    func resumeItems(baseURL: URL, userID: String, token: String, limit: Int = 18) async throws -> [JellyfinLibraryItem] {
+        let request = try makeRequest(
+            baseURL: baseURL,
+            path: "UserItems/Resume",
+            token: token,
+            queryItems: [
+                URLQueryItem(name: "userId", value: userID),
+                URLQueryItem(name: "limit", value: String(limit)),
+                URLQueryItem(name: "fields", value: "Overview,CommunityRating,ProductionYear,OfficialRating,RunTimeTicks,ImageTags,ChildCount,IndexNumber,ParentIndexNumber,UserData"),
+                URLQueryItem(name: "enableUserData", value: "true"),
+            ]
+        )
+
+        let dto: BaseItemQueryResultDTO = try await send(request)
+        return dto.items.compactMap(\.asLibraryItem)
+    }
+
+    func nextUpItems(baseURL: URL, userID: String, token: String, limit: Int = 18) async throws -> [JellyfinLibraryItem] {
+        let request = try makeRequest(
+            baseURL: baseURL,
+            path: "Shows/NextUp",
+            token: token,
+            queryItems: [
+                URLQueryItem(name: "userId", value: userID),
+                URLQueryItem(name: "limit", value: String(limit)),
+                URLQueryItem(name: "fields", value: "Overview,CommunityRating,ProductionYear,OfficialRating,RunTimeTicks,ImageTags,ChildCount,IndexNumber,ParentIndexNumber,UserData"),
+                URLQueryItem(name: "enableUserData", value: "true"),
+            ]
+        )
+
+        let dto: BaseItemQueryResultDTO = try await send(request)
+        return dto.items.compactMap(\.asLibraryItem)
+    }
+
+    func favoriteItems(baseURL: URL, userID: String, token: String, limit: Int = 36) async throws -> [JellyfinLibraryItem] {
+        let request = try makeRequest(
+            baseURL: baseURL,
+            path: "Items",
+            token: token,
+            queryItems: [
+                URLQueryItem(name: "userId", value: userID),
+                URLQueryItem(name: "recursive", value: "true"),
+                URLQueryItem(name: "isFavorite", value: "true"),
+                URLQueryItem(name: "includeItemTypes", value: "Movie,Episode,Series"),
+                URLQueryItem(name: "sortBy", value: "SortName"),
+                URLQueryItem(name: "sortOrder", value: "Ascending"),
+                URLQueryItem(name: "limit", value: String(limit)),
+                URLQueryItem(name: "fields", value: "Overview,CommunityRating,ProductionYear,OfficialRating,RunTimeTicks,ImageTags,ChildCount,IndexNumber,ParentIndexNumber,UserData"),
+                URLQueryItem(name: "enableUserData", value: "true"),
+            ]
+        )
+
+        let dto: BaseItemQueryResultDTO = try await send(request)
+        return dto.items.compactMap(\.asLibraryItem)
+    }
+
+    func searchItems(
+        baseURL: URL,
+        userID: String,
+        token: String,
+        searchTerm: String,
+        limit: Int = 60
+    ) async throws -> [JellyfinLibraryItem] {
+        let trimmedSearch = searchTerm.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard trimmedSearch.isEmpty == false else {
+            return []
+        }
+
+        let request = try makeRequest(
+            baseURL: baseURL,
+            path: "Items",
+            token: token,
+            queryItems: [
+                URLQueryItem(name: "userId", value: userID),
+                URLQueryItem(name: "recursive", value: "true"),
+                URLQueryItem(name: "searchTerm", value: trimmedSearch),
+                URLQueryItem(name: "includeItemTypes", value: "Movie,Series,Episode"),
+                URLQueryItem(name: "sortBy", value: "SortName"),
+                URLQueryItem(name: "sortOrder", value: "Ascending"),
+                URLQueryItem(name: "limit", value: String(limit)),
+                URLQueryItem(name: "fields", value: "Overview,CommunityRating,ProductionYear,OfficialRating,RunTimeTicks,ImageTags,ChildCount,IndexNumber,ParentIndexNumber,UserData"),
+                URLQueryItem(name: "enableUserData", value: "true"),
+            ]
+        )
+
+        let dto: BaseItemQueryResultDTO = try await send(request)
+        return dto.items.compactMap(\.asLibraryItem)
+    }
+
     func libraryMovies(
         baseURL: URL,
         userID: String,
@@ -204,6 +298,40 @@ struct JellyfinAPIClient {
         let trimmedSearch = searchTerm.trimmingCharacters(in: .whitespacesAndNewlines)
         if trimmedSearch.isEmpty == false {
             queryItems.append(URLQueryItem(name: "searchTerm", value: trimmedSearch))
+        }
+
+        let request = try makeRequest(
+            baseURL: baseURL,
+            path: "Items",
+            token: token,
+            queryItems: queryItems
+        )
+
+        let dto: BaseItemQueryResultDTO = try await send(request)
+        return dto.items.compactMap(\.asLibraryItem)
+    }
+
+    func childItems(
+        baseURL: URL,
+        userID: String,
+        token: String,
+        parentID: String,
+        recursive: Bool,
+        includeItemTypes: String? = nil
+    ) async throws -> [JellyfinLibraryItem] {
+        var queryItems = [
+            URLQueryItem(name: "userId", value: userID),
+            URLQueryItem(name: "parentId", value: parentID),
+            URLQueryItem(name: "recursive", value: recursive ? "true" : "false"),
+            URLQueryItem(name: "sortBy", value: "ParentIndexNumber,IndexNumber,SortName"),
+            URLQueryItem(name: "sortOrder", value: "Ascending"),
+            URLQueryItem(name: "limit", value: "400"),
+            URLQueryItem(name: "fields", value: "Overview,CommunityRating,ProductionYear,OfficialRating,RunTimeTicks,ImageTags,ChildCount,IndexNumber,ParentIndexNumber,UserData"),
+            URLQueryItem(name: "enableUserData", value: "true"),
+        ]
+
+        if let includeItemTypes, includeItemTypes.isEmpty == false {
+            queryItems.append(URLQueryItem(name: "includeItemTypes", value: includeItemTypes))
         }
 
         let request = try makeRequest(
@@ -318,6 +446,74 @@ struct JellyfinAPIClient {
         return components.url
     }
 
+    func webDetailsURL(baseURL: URL, itemID: String) -> URL? {
+        let endpoint = baseURL.appendingPathComponent("web/index.html")
+
+        guard var components = URLComponents(url: endpoint, resolvingAgainstBaseURL: false) else {
+            return nil
+        }
+
+        components.fragment = "/details?id=\(itemID)"
+        return components.url
+    }
+
+    func directVideoURL(baseURL: URL, itemID: String, token: String) -> URL? {
+        let endpoint = baseURL.appendingPathComponent("Videos/\(itemID)/stream")
+
+        guard var components = URLComponents(url: endpoint, resolvingAgainstBaseURL: false) else {
+            return nil
+        }
+
+        components.queryItems = [
+            URLQueryItem(name: "static", value: "true"),
+            URLQueryItem(name: "api_key", value: token),
+        ]
+        return components.url
+    }
+
+    func playbackStream(
+        baseURL: URL,
+        userID: String,
+        token: String,
+        itemID: String
+    ) async throws -> JellyfinPlaybackStream {
+        let requestBody = PlaybackInfoRequestDTO(
+            userID: userID,
+            maxStreamingBitrate: 60_000_000,
+            deviceProfile: .mediaHarborDefault
+        )
+
+        let request = try makeRequest(
+            baseURL: baseURL,
+            path: "Items/\(itemID)/PlaybackInfo",
+            method: "POST",
+            token: token,
+            body: requestBody
+        )
+
+        let response: PlaybackInfoResponseDTO = try await send(request)
+        let mediaSources = response.mediaSources ?? []
+        let selectedSource = mediaSources.first
+
+        if let transcodingURL = selectedSource?.transcodingURL,
+           let resolvedURL = resolvePlaybackURL(baseURL: baseURL, token: token, pathOrURL: transcodingURL)
+        {
+            return JellyfinPlaybackStream(url: resolvedURL, routeDescription: "服务器转码")
+        }
+
+        if let directStreamURL = selectedSource?.directStreamURL,
+           let resolvedURL = resolvePlaybackURL(baseURL: baseURL, token: token, pathOrURL: directStreamURL)
+        {
+            return JellyfinPlaybackStream(url: resolvedURL, routeDescription: "直接串流")
+        }
+
+        if let fallbackURL = directVideoURL(baseURL: baseURL, itemID: itemID, token: token) {
+            return JellyfinPlaybackStream(url: fallbackURL, routeDescription: "直接播放")
+        }
+
+        throw APIError.serverMessage("Jellyfin 没有返回可用的播放地址。")
+    }
+
     func startTask(baseURL: URL, token: String, taskID: String) async throws {
         let request = try makeRequest(
             baseURL: baseURL,
@@ -334,6 +530,25 @@ struct JellyfinAPIClient {
             path: "ScheduledTasks/Running/\(taskID)",
             method: "DELETE",
             token: token
+        )
+        try await sendVoid(request)
+    }
+
+    func setFavorite(
+        baseURL: URL,
+        userID: String,
+        token: String,
+        itemID: String,
+        isFavorite: Bool
+    ) async throws {
+        let request = try makeRequest(
+            baseURL: baseURL,
+            path: "UserFavoriteItems/\(itemID)",
+            method: isFavorite ? "POST" : "DELETE",
+            token: token,
+            queryItems: [
+                URLQueryItem(name: "userId", value: userID),
+            ]
         )
         try await sendVoid(request)
     }
@@ -455,6 +670,39 @@ struct JellyfinAPIClient {
 
         return "MediaBrowser \(values.joined(separator: ", "))"
     }
+
+    private func resolvePlaybackURL(baseURL: URL, token: String, pathOrURL: String) -> URL? {
+        if let fullURL = URL(string: pathOrURL), fullURL.scheme != nil {
+            return fullURL
+        }
+
+        let trimmed = pathOrURL.hasPrefix("/") ? String(pathOrURL.dropFirst()) : pathOrURL
+        guard let joined = URL(string: trimmed, relativeTo: baseURL)?.absoluteURL else {
+            return nil
+        }
+
+        guard var components = URLComponents(url: joined, resolvingAgainstBaseURL: false) else {
+            return joined
+        }
+
+        var queryItems = components.queryItems ?? []
+        if queryItems.contains(where: { $0.name == "api_key" }) == false {
+            queryItems.append(URLQueryItem(name: "api_key", value: token))
+        }
+        components.queryItems = queryItems
+        return components.url
+    }
+}
+
+extension JellyfinAPIClient.APIError {
+    var isGenericServerProcessingMessage: Bool {
+        guard case let .serverMessage(message) = self else {
+            return false
+        }
+
+        let trimmed = message.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        return trimmed == "error processing request."
+    }
 }
 
 private struct AuthenticateRequestDTO: Encodable {
@@ -488,6 +736,129 @@ private struct AuthenticationResultDTO: Decodable {
     enum CodingKeys: String, CodingKey {
         case user = "User"
         case accessToken = "AccessToken"
+    }
+}
+
+private struct PlaybackInfoRequestDTO: Encodable {
+    let userID: String
+    let maxStreamingBitrate: Int
+    let deviceProfile: PlaybackDeviceProfileDTO
+
+    enum CodingKeys: String, CodingKey {
+        case userID = "UserId"
+        case maxStreamingBitrate = "MaxStreamingBitrate"
+        case deviceProfile = "DeviceProfile"
+    }
+}
+
+private struct PlaybackDeviceProfileDTO: Encodable {
+    let name: String
+    let directPlayProfiles: [PlaybackDirectPlayProfileDTO]
+    let transcodingProfiles: [PlaybackTranscodingProfileDTO]
+    let subtitleProfiles: [PlaybackSubtitleProfileDTO]
+
+    enum CodingKeys: String, CodingKey {
+        case name = "Name"
+        case directPlayProfiles = "DirectPlayProfiles"
+        case transcodingProfiles = "TranscodingProfiles"
+        case subtitleProfiles = "SubtitleProfiles"
+    }
+
+    static let mediaHarborDefault = PlaybackDeviceProfileDTO(
+        name: "MediaHarbor",
+        directPlayProfiles: [
+            PlaybackDirectPlayProfileDTO(
+                container: "mp4,m4v,mov",
+                type: "Video",
+                videoCodec: "h264",
+                audioCodec: "aac,ac3,eac3,mp3"
+            ),
+        ],
+        transcodingProfiles: [
+            PlaybackTranscodingProfileDTO(
+                container: "mp4",
+                type: "Video",
+                protocolName: "hls",
+                videoCodec: "h264",
+                audioCodec: "aac",
+                context: "Streaming",
+                maxAudioChannels: "8",
+                minSegments: 2,
+                breakOnNonKeyFrames: true,
+                enableSubtitlesInManifest: true
+            ),
+        ],
+        subtitleProfiles: [
+            PlaybackSubtitleProfileDTO(format: "vtt", method: "Hls"),
+        ]
+    )
+}
+
+private struct PlaybackDirectPlayProfileDTO: Encodable {
+    let container: String
+    let type: String
+    let videoCodec: String
+    let audioCodec: String
+
+    enum CodingKeys: String, CodingKey {
+        case container = "Container"
+        case type = "Type"
+        case videoCodec = "VideoCodec"
+        case audioCodec = "AudioCodec"
+    }
+}
+
+private struct PlaybackTranscodingProfileDTO: Encodable {
+    let container: String
+    let type: String
+    let protocolName: String
+    let videoCodec: String
+    let audioCodec: String
+    let context: String
+    let maxAudioChannels: String
+    let minSegments: Int
+    let breakOnNonKeyFrames: Bool
+    let enableSubtitlesInManifest: Bool
+
+    enum CodingKeys: String, CodingKey {
+        case container = "Container"
+        case type = "Type"
+        case protocolName = "Protocol"
+        case videoCodec = "VideoCodec"
+        case audioCodec = "AudioCodec"
+        case context = "Context"
+        case maxAudioChannels = "MaxAudioChannels"
+        case minSegments = "MinSegments"
+        case breakOnNonKeyFrames = "BreakOnNonKeyFrames"
+        case enableSubtitlesInManifest = "EnableSubtitlesInManifest"
+    }
+}
+
+private struct PlaybackSubtitleProfileDTO: Encodable {
+    let format: String
+    let method: String
+
+    enum CodingKeys: String, CodingKey {
+        case format = "Format"
+        case method = "Method"
+    }
+}
+
+private struct PlaybackInfoResponseDTO: Decodable {
+    let mediaSources: [PlaybackMediaSourceDTO]?
+
+    enum CodingKeys: String, CodingKey {
+        case mediaSources = "MediaSources"
+    }
+}
+
+private struct PlaybackMediaSourceDTO: Decodable {
+    let transcodingURL: String?
+    let directStreamURL: String?
+
+    enum CodingKeys: String, CodingKey {
+        case transcodingURL = "TranscodingUrl"
+        case directStreamURL = "DirectStreamUrl"
     }
 }
 
@@ -551,6 +922,9 @@ private struct BaseItemDTO: Decodable {
     let runtimeTicks: Int64?
     let premiereDateText: String?
     let imageTags: [String: String]?
+    let indexNumber: Int?
+    let parentIndexNumber: Int?
+    let userData: UserDataDTO?
 
     enum CodingKeys: String, CodingKey {
         case identifier = "Id"
@@ -567,6 +941,9 @@ private struct BaseItemDTO: Decodable {
         case runtimeTicks = "RunTimeTicks"
         case premiereDateText = "PremiereDate"
         case imageTags = "ImageTags"
+        case indexNumber = "IndexNumber"
+        case parentIndexNumber = "ParentIndexNumber"
+        case userData = "UserData"
     }
 
     var asLibrary: JellyfinLibrary? {
@@ -598,7 +975,9 @@ private struct BaseItemDTO: Decodable {
             officialRating: officialRating,
             runtimeTicks: runtimeTicks,
             premiereDateText: premiereDateText,
-            primaryImageTag: imageTags?["Primary"]
+            primaryImageTag: imageTags?["Primary"],
+            playbackPositionTicks: userData?.playbackPositionTicks,
+            isFavorite: userData?.isFavorite ?? false
         )
     }
 
@@ -619,8 +998,22 @@ private struct BaseItemDTO: Decodable {
             premiereDateText: premiereDateText,
             primaryImageTag: imageTags?["Primary"],
             childCount: childCount,
-            isFolder: isFolder ?? false
+            isFolder: isFolder ?? false,
+            indexNumber: indexNumber,
+            parentIndexNumber: parentIndexNumber,
+            playbackPositionTicks: userData?.playbackPositionTicks,
+            isFavorite: userData?.isFavorite ?? false
         )
+    }
+}
+
+private struct UserDataDTO: Decodable {
+    let playbackPositionTicks: Int64?
+    let isFavorite: Bool?
+
+    enum CodingKeys: String, CodingKey {
+        case playbackPositionTicks = "PlaybackPositionTicks"
+        case isFavorite = "IsFavorite"
     }
 }
 

@@ -269,6 +269,50 @@ struct QBTorrent: Identifiable, Equatable, Sendable {
     }
 }
 
+struct QBTorrentCategory: Identifiable, Equatable, Sendable {
+    let name: String
+    let savePath: String
+
+    var id: String {
+        name
+    }
+
+    var displayTitle: String {
+        let trimmedSavePath = savePath.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard trimmedSavePath.isEmpty == false else {
+            return name
+        }
+
+        return "\(name) · \(trimmedSavePath)"
+    }
+}
+
+struct QBittorrentRemoteAddOutcome: Equatable, Sendable {
+    enum Kind: Equatable, Sendable {
+        case added
+        case duplicateLike
+        case partial
+        case failed
+    }
+
+    let kind: Kind
+    let attemptedCount: Int
+    let addedCount: Int
+
+    var message: String {
+        switch kind {
+        case .added:
+            return attemptedCount == 1 ? "已发送到 qBittorrent。" : "已发送 \(addedCount) 个资源到 qBittorrent。"
+        case .duplicateLike:
+            return "qBittorrent 没有新增任务，这些资源可能已经存在。"
+        case .partial:
+            return "qBittorrent 只新增了 \(addedCount)/\(attemptedCount) 个任务，其余资源可能已存在。"
+        case .failed:
+            return "发送到 qBittorrent 失败。"
+        }
+    }
+}
+
 enum QBTorrentStateCategory: Sendable {
     case downloading
     case seeding

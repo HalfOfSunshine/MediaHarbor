@@ -1,8 +1,70 @@
 import SwiftUI
 
+private struct JellyfinPlaybackDestinationActionCard: View {
+    let iconName: String
+    let title: String
+    let summary: String
+    let selectedTarget: JellyfinPlaybackOpenTarget
+    let availableTargets: [JellyfinPlaybackOpenTarget]
+    let action: () -> Void
+    let onSelectTarget: (JellyfinPlaybackOpenTarget) -> Void
+
+    var body: some View {
+            HStack(spacing: 12) {
+                Button(action: action) {
+                    HStack(spacing: 12) {
+                        Image(systemName: iconName)
+                            .font(.title3.weight(.semibold))
+
+                        VStack(alignment: .leading, spacing: 4) {
+                            Text(title)
+                                .font(.headline)
+
+                            Text(summary)
+                                .font(.footnote)
+                                .foregroundStyle(.secondary)
+                        }
+
+                        Spacer()
+
+                        Image(systemName: "chevron.right")
+                            .font(.footnote.weight(.semibold))
+                            .foregroundStyle(.tertiary)
+                    }
+                    .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+
+                if availableTargets.isEmpty == false {
+                    Menu {
+                        ForEach(availableTargets) { target in
+                            Button {
+                                onSelectTarget(target)
+                            } label: {
+                                Label(
+                                    target.title,
+                                    systemImage: selectedTarget == target ? "checkmark" : target.iconName
+                                )
+                            }
+                        }
+                    } label: {
+                        Image(systemName: "ellipsis.circle")
+                            .font(.title3.weight(.semibold))
+                            .foregroundStyle(.secondary)
+                            .frame(width: 34, height: 34)
+                    }
+                }
+            }
+            .padding(16)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(Color(.secondarySystemBackground), in: RoundedRectangle(cornerRadius: 22, style: .continuous))
+    }
+}
+
 struct JellyfinServerCard: View {
     let session: JellyfinSessionSnapshot
     let isRefreshing: Bool
+    var showsServerURL: Bool = true
     let refreshAction: () -> Void
 
     var body: some View {
@@ -12,10 +74,12 @@ struct JellyfinServerCard: View {
                     Text(session.serverName)
                         .font(.title3.weight(.semibold))
 
-                    Text(session.serverURLString)
-                        .font(.footnote)
-                        .foregroundStyle(.secondary)
-                        .textSelection(.enabled)
+                    if showsServerURL {
+                        Text(session.serverURLString)
+                            .font(.footnote)
+                            .foregroundStyle(.secondary)
+                            .textSelection(.enabled)
+                    }
                 }
 
                 Spacer()
@@ -318,6 +382,24 @@ struct JellyfinMovieCard: View {
                     .lineLimit(2)
 
                 HStack(spacing: 8) {
+                    if let playbackPositionText = movie.playbackPositionText {
+                        Text("看到 \(playbackPositionText)")
+                    } else {
+                        Text(movie.yearText)
+                    }
+
+                    if movie.isFavorite {
+                        Image(systemName: "heart.fill")
+                    }
+
+                    if movie.playbackPositionText == nil {
+                        EmptyView()
+                    }
+                }
+                .font(.caption)
+                .foregroundStyle(.secondary)
+
+                HStack(spacing: 8) {
                     Text(movie.yearText)
 
                     if let rating = movie.ratingText {
@@ -332,6 +414,60 @@ struct JellyfinMovieCard: View {
                 .foregroundStyle(.secondary)
 
                 Text(movie.summaryText)
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(3)
+            }
+        }
+        .padding(14)
+        .frame(width: 220, alignment: .leading)
+        .background(Color(.secondarySystemBackground), in: RoundedRectangle(cornerRadius: 24, style: .continuous))
+    }
+}
+
+struct JellyfinLibraryItemCard: View {
+    @Environment(AppState.self) private var appState
+
+    let item: JellyfinLibraryItem
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            JellyfinPosterArtwork(
+                url: appState.jellyfin.primaryImageURL(for: item, maxWidth: 440, maxHeight: 660),
+                height: 180,
+                cornerRadius: 20,
+                symbolName: item.posterSymbolName
+            ) {
+                VStack(alignment: .leading, spacing: 6) {
+                    Text(item.episodeText ?? item.metaText)
+                        .font(.caption.weight(.semibold))
+                        .foregroundStyle(.white.opacity(0.84))
+                }
+                .padding(16)
+            }
+
+            VStack(alignment: .leading, spacing: 6) {
+                Text(item.name)
+                    .font(.headline)
+                    .lineLimit(2)
+
+                HStack(spacing: 8) {
+                    if let playbackPositionText = item.playbackPositionText {
+                        Text("看到 \(playbackPositionText)")
+                    } else if let episodeText = item.episodeText {
+                        Text(episodeText)
+                    } else {
+                        Text(item.metaText)
+                    }
+
+                    if item.isFavorite {
+                        Image(systemName: "heart.fill")
+                    }
+                }
+                .font(.caption)
+                .foregroundStyle(.secondary)
+
+                Text(item.summaryText)
                     .font(.footnote)
                     .foregroundStyle(.secondary)
                     .lineLimit(3)
@@ -561,10 +697,188 @@ struct JellyfinInfoNote: View {
     }
 }
 
-struct JellyfinMovieDetailView: View {
+private struct JellyfinEpisodeBrowserSection: View {
     @Environment(AppState.self) private var appState
 
+    let item: JellyfinLibraryItem
+
+    @State private var episodes: [JellyfinLibraryItem] = []
+    @State private var isLoading = false
+    @State private var errorMessage: String?
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            Text(sectionTitle)
+                .font(.headline)
+
+            if isLoading {
+                HStack(spacing: 10) {
+                    ProgressView()
+                    Text("正在加载剧集列表…")
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
+                }
+            } else if let errorMessage {
+                JellyfinInfoNote(title: "加载失败", message: errorMessage)
+            } else if groupedEpisodes.isEmpty {
+                JellyfinInfoNote(title: sectionTitle, message: "Jellyfin 还没有返回可播放的剧集。")
+            } else {
+                VStack(alignment: .leading, spacing: 14) {
+                    ForEach(groupedEpisodes, id: \.id) { group in
+                        VStack(alignment: .leading, spacing: 10) {
+                            Text(group.title)
+                                .font(.subheadline.weight(.semibold))
+                                .foregroundStyle(.secondary)
+
+                            ForEach(group.items) { episode in
+                                NavigationLink {
+                                    JellyfinLibraryItemDetailView(item: episode)
+                                } label: {
+                                    JellyfinEpisodeRow(item: episode)
+                                }
+                                .buttonStyle(.plain)
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        .id("episode-browser")
+        .task(id: item.id) {
+            await loadEpisodes()
+        }
+    }
+
+    private var sectionTitle: String {
+        item.kind == .season ? "剧集" : "选集"
+    }
+
+    private var groupedEpisodes: [EpisodeGroup] {
+        let sortedEpisodes = episodes.sorted { lhs, rhs in
+            let lhsSeason = lhs.parentIndexNumber ?? 0
+            let rhsSeason = rhs.parentIndexNumber ?? 0
+            if lhsSeason != rhsSeason {
+                return lhsSeason < rhsSeason
+            }
+
+            let lhsEpisode = lhs.indexNumber ?? 0
+            let rhsEpisode = rhs.indexNumber ?? 0
+            if lhsEpisode != rhsEpisode {
+                return lhsEpisode < rhsEpisode
+            }
+
+            return lhs.name.localizedCaseInsensitiveCompare(rhs.name) == .orderedAscending
+        }
+
+        if item.kind == .season {
+            return [EpisodeGroup(id: item.id, title: item.metaText, items: sortedEpisodes)]
+        }
+
+        let grouped = Dictionary(grouping: sortedEpisodes) { $0.parentIndexNumber ?? 0 }
+        return grouped
+            .keys
+            .sorted()
+            .map { seasonNumber in
+                EpisodeGroup(
+                    id: "\(item.id)|\(seasonNumber)",
+                    title: seasonNumber > 0 ? "第 \(seasonNumber) 季" : "未标记季度",
+                    items: grouped[seasonNumber] ?? []
+                )
+            }
+    }
+
+    private func loadEpisodes() async {
+        guard item.kind == .series || item.kind == .season else {
+            episodes = []
+            errorMessage = nil
+            return
+        }
+
+        isLoading = true
+        errorMessage = nil
+
+        defer {
+            isLoading = false
+        }
+
+        do {
+            episodes = try await appState.jellyfin.childItems(for: item)
+                .filter { $0.kind == .episode }
+        } catch {
+            errorMessage = error.localizedDescription
+        }
+    }
+
+    private struct EpisodeGroup {
+        let id: String
+        let title: String
+        let items: [JellyfinLibraryItem]
+    }
+}
+
+private struct JellyfinEpisodeRow: View {
+    let item: JellyfinLibraryItem
+
+    var body: some View {
+        HStack(spacing: 12) {
+            Image(systemName: "play.circle.fill")
+                .font(.title3)
+                .foregroundStyle(Color.accentColor)
+
+            VStack(alignment: .leading, spacing: 4) {
+                Text(item.name)
+                    .font(.body.weight(.medium))
+                    .multilineTextAlignment(.leading)
+
+                HStack(spacing: 8) {
+                    if let episodeText = item.episodeText {
+                        Text(episodeText)
+                    }
+
+                    if let runtimeText = item.runtimeText {
+                        Text(runtimeText)
+                    }
+
+                    if let playbackPositionText = item.playbackPositionText {
+                        Text("看到 \(playbackPositionText)")
+                    }
+                }
+                .font(.caption)
+                .foregroundStyle(.secondary)
+            }
+
+            Spacer()
+
+            Image(systemName: "chevron.right")
+                .font(.footnote.weight(.semibold))
+                .foregroundStyle(.tertiary)
+        }
+        .padding(14)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(Color(.secondarySystemBackground), in: RoundedRectangle(cornerRadius: 18, style: .continuous))
+    }
+}
+
+struct JellyfinMovieDetailView: View {
+    @Environment(AppState.self) private var appState
+    @Environment(\.openURL) private var openURL
+
     let movie: JellyfinMovie
+
+    @State private var playbackOpenErrorMessage: String?
+    @State private var internalPlayerSession: JellyfinInternalPlayerSession?
+    @State private var isOpeningPlayback = false
+    @State private var isFavorite: Bool
+    @State private var favoriteErrorMessage: String?
+
+    init(movie: JellyfinMovie) {
+        self.movie = movie
+        _isFavorite = State(initialValue: movie.isFavorite)
+    }
+
+    private var selectedPlaybackTarget: JellyfinPlaybackOpenTarget {
+        appState.jellyfinPlaybackPreferences.preferredOpenTarget
+    }
 
     var body: some View {
         ScrollView {
@@ -603,6 +917,20 @@ struct JellyfinMovieDetailView: View {
                         .foregroundStyle(.secondary)
                 }
 
+                JellyfinPlaybackDestinationActionCard(
+                    iconName: isOpeningPlayback ? "hourglass" : selectedPlaybackTarget.iconName,
+                    title: isOpeningPlayback ? "正在准备播放" : selectedPlaybackTarget.actionTitle(playbackPositionText: movie.playbackPositionText),
+                    summary: isOpeningPlayback ? "正在向 Jellyfin 请求可播放的视频流。" : selectedPlaybackTarget.actionSummary(playbackPositionText: movie.playbackPositionText),
+                    selectedTarget: selectedPlaybackTarget,
+                    availableTargets: JellyfinPlaybackOpenTarget.allCases
+                ) {
+                    Task {
+                        await openPlaybackTarget(selectedPlaybackTarget)
+                    }
+                } onSelectTarget: { target in
+                    appState.jellyfinPlaybackPreferences.preferredOpenTarget = target
+                }
+
                 Text(movie.summaryText)
                     .font(.body)
                     .lineSpacing(4)
@@ -612,60 +940,368 @@ struct JellyfinMovieDetailView: View {
         .navigationTitle(movie.name)
         .navigationBarTitleDisplayMode(.inline)
         .secondaryPageStyle()
+        .toolbar {
+            ToolbarItem(placement: .topBarTrailing) {
+                Button {
+                    Task {
+                        await toggleFavorite()
+                    }
+                } label: {
+                    if appState.jellyfin.favoriteActionItemID == movie.id {
+                        ProgressView()
+                    } else {
+                        Image(systemName: isFavorite ? "heart.fill" : "heart")
+                    }
+                }
+            }
+        }
+        .alert("打开失败", isPresented: Binding(
+            get: { playbackOpenErrorMessage != nil },
+            set: { newValue in
+                if newValue == false {
+                    playbackOpenErrorMessage = nil
+                }
+            }
+        )) {
+            Button("确定", role: .cancel) {}
+        } message: {
+            Text(playbackOpenErrorMessage ?? "")
+        }
+        .alert("收藏操作失败", isPresented: Binding(
+            get: { favoriteErrorMessage != nil },
+            set: { newValue in
+                if newValue == false {
+                    favoriteErrorMessage = nil
+                }
+            }
+        )) {
+            Button("确定", role: .cancel) {}
+        } message: {
+            Text(favoriteErrorMessage ?? "")
+        }
+        .fullScreenCover(item: $internalPlayerSession) { session in
+            JellyfinPlayerView(
+                title: session.title,
+                streamURL: session.streamURL,
+                routeText: session.routeText,
+                startPositionTicks: session.startPositionTicks
+            )
+        }
+    }
+
+    private func openPlaybackTarget(_ target: JellyfinPlaybackOpenTarget) async {
+        do {
+            if target == .app {
+                guard isOpeningPlayback == false else {
+                    return
+                }
+
+                isOpeningPlayback = true
+                defer {
+                    isOpeningPlayback = false
+                }
+
+                let stream = try await appState.jellyfin.playbackStream(for: movie.id)
+                internalPlayerSession = JellyfinInternalPlayerSession(
+                    title: movie.name,
+                    streamURL: stream.url,
+                    routeText: stream.routeDescription,
+                    startPositionTicks: movie.playbackPositionTicks
+                )
+                return
+            }
+
+            let url = try JellyfinExternalPlayback.targetURL(
+                for: target,
+                webURL: appState.jellyfin.webDetailsURL(for: movie.id),
+                streamURL: movie.canOpenInExternalPlayer ? appState.jellyfin.directVideoURL(for: movie.id) : nil
+            )
+            openURL(url)
+        } catch {
+            playbackOpenErrorMessage = error.localizedDescription
+        }
+    }
+
+    private func toggleFavorite() async {
+        let targetValue = !isFavorite
+
+        do {
+            try await appState.jellyfin.setFavorite(itemID: movie.id, isFavorite: targetValue)
+            isFavorite = targetValue
+        } catch {
+            favoriteErrorMessage = error.localizedDescription
+        }
     }
 }
 
 struct JellyfinLibraryItemDetailView: View {
     @Environment(AppState.self) private var appState
+    @Environment(\.openURL) private var openURL
 
     let item: JellyfinLibraryItem
 
+    @State private var playbackOpenErrorMessage: String?
+    @State private var internalPlayerSession: JellyfinInternalPlayerSession?
+    @State private var isOpeningPlayback = false
+    @State private var isFavorite: Bool
+    @State private var favoriteErrorMessage: String?
+
+    init(item: JellyfinLibraryItem) {
+        self.item = item
+        _isFavorite = State(initialValue: item.isFavorite)
+    }
+
     var body: some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: 18) {
-                JellyfinPosterArtwork(
-                    url: appState.jellyfin.primaryImageURL(for: item, maxWidth: 900, maxHeight: 1350),
-                    height: 260,
-                    cornerRadius: 28,
-                    symbolName: item.posterSymbolName
-                ) {
-                    VStack(alignment: .leading, spacing: 8) {
-                        Text(item.name)
-                            .font(.title2.weight(.bold))
-                            .foregroundStyle(.white)
+        ScrollViewReader { proxy in
+            ScrollView {
+                VStack(alignment: .leading, spacing: 18) {
+                    JellyfinPosterArtwork(
+                        url: appState.jellyfin.primaryImageURL(for: item, maxWidth: 900, maxHeight: 1350),
+                        height: 260,
+                        cornerRadius: 28,
+                        symbolName: item.posterSymbolName
+                    ) {
+                        VStack(alignment: .leading, spacing: 8) {
+                            Text(item.name)
+                                .font(.title2.weight(.bold))
+                                .foregroundStyle(.white)
 
-                        HStack(spacing: 10) {
-                            Text(item.metaText)
-                            Text(item.yearText)
+                            HStack(spacing: 10) {
+                                Text(item.metaText)
+                                Text(item.yearText)
 
-                            if let rating = item.ratingText {
-                                Text("评分 \(rating)")
+                                if let rating = item.ratingText {
+                                    Text("评分 \(rating)")
+                                }
+
+                                if let runtime = item.runtimeText {
+                                    Text(runtime)
+                                }
                             }
-
-                            if let runtime = item.runtimeText {
-                                Text(runtime)
-                            }
+                            .font(.callout.weight(.medium))
+                            .foregroundStyle(.white.opacity(0.86))
                         }
-                        .font(.callout.weight(.medium))
-                        .foregroundStyle(.white.opacity(0.86))
+                        .padding(20)
                     }
-                    .padding(20)
-                }
 
-                if let officialRating = item.officialRating {
-                    Label(officialRating, systemImage: "checkmark.shield.fill")
-                        .font(.callout.weight(.medium))
-                        .foregroundStyle(.secondary)
-                }
+                    if let officialRating = item.officialRating {
+                        Label(officialRating, systemImage: "checkmark.shield.fill")
+                            .font(.callout.weight(.medium))
+                            .foregroundStyle(.secondary)
+                    }
 
-                Text(item.summaryText)
-                    .font(.body)
-                    .lineSpacing(4)
+                    if availableTargets.isEmpty == false {
+                        JellyfinPlaybackDestinationActionCard(
+                            iconName: isOpeningPlayback ? "hourglass" : actionCardIconName,
+                            title: isOpeningPlayback ? "正在准备播放" : actionCardTitle,
+                            summary: isOpeningPlayback ? "正在向 Jellyfin 请求可播放的视频流。" : actionCardSummary,
+                            selectedTarget: selectedPlaybackTarget,
+                            availableTargets: availableTargets
+                        ) {
+                            Task {
+                                await handlePrimaryAction(proxy: proxy)
+                            }
+                        } onSelectTarget: { target in
+                            appState.jellyfinPlaybackPreferences.preferredOpenTarget = target
+                        }
+                    }
+
+                    Text(item.summaryText)
+                        .font(.body)
+                        .lineSpacing(4)
+
+                    if showsEpisodeBrowser {
+                        JellyfinEpisodeBrowserSection(item: item)
+                    }
+                }
+                .padding()
             }
-            .padding()
         }
         .navigationTitle(item.name)
         .navigationBarTitleDisplayMode(.inline)
         .secondaryPageStyle()
+        .toolbar {
+            ToolbarItem(placement: .topBarTrailing) {
+                Button {
+                    Task {
+                        await toggleFavorite()
+                    }
+                } label: {
+                    if appState.jellyfin.favoriteActionItemID == item.id {
+                        ProgressView()
+                    } else {
+                        Image(systemName: isFavorite ? "heart.fill" : "heart")
+                    }
+                }
+            }
+        }
+        .alert("打开失败", isPresented: Binding(
+            get: { playbackOpenErrorMessage != nil },
+            set: { newValue in
+                if newValue == false {
+                    playbackOpenErrorMessage = nil
+                }
+            }
+        )) {
+            Button("确定", role: .cancel) {}
+        } message: {
+            Text(playbackOpenErrorMessage ?? "")
+        }
+        .alert("收藏操作失败", isPresented: Binding(
+            get: { favoriteErrorMessage != nil },
+            set: { newValue in
+                if newValue == false {
+                    favoriteErrorMessage = nil
+                }
+            }
+        )) {
+            Button("确定", role: .cancel) {}
+        } message: {
+            Text(favoriteErrorMessage ?? "")
+        }
+        .fullScreenCover(item: $internalPlayerSession) { session in
+            JellyfinPlayerView(
+                title: session.title,
+                streamURL: session.streamURL,
+                routeText: session.routeText,
+                startPositionTicks: session.startPositionTicks
+            )
+        }
+    }
+
+    private var preferredOpenTarget: JellyfinPlaybackOpenTarget {
+        appState.jellyfinPlaybackPreferences.preferredOpenTarget
+    }
+
+    private var showsEpisodeBrowser: Bool {
+        item.kind == .series || item.kind == .season
+    }
+
+    private var availableTargets: [JellyfinPlaybackOpenTarget] {
+        if item.canOpenInExternalPlayer {
+            return JellyfinPlaybackOpenTarget.allCases
+        }
+
+        if showsEpisodeBrowser {
+            return [.app, .web]
+        }
+
+        return [.web]
+    }
+
+    private var selectedPlaybackTarget: JellyfinPlaybackOpenTarget {
+        if availableTargets.contains(preferredOpenTarget) {
+            return preferredOpenTarget
+        }
+
+        if availableTargets.contains(.app) {
+            return .app
+        }
+
+        return availableTargets.first ?? .web
+    }
+
+    private var actionCardIconName: String {
+        if showsEpisodeBrowser, selectedPlaybackTarget == .app {
+            return "play.rectangle.fill"
+        }
+
+        return selectedPlaybackTarget.iconName
+    }
+
+    private var actionCardTitle: String {
+        if showsEpisodeBrowser, selectedPlaybackTarget == .app {
+            switch item.kind {
+            case .series:
+                return "查看选集"
+            case .season:
+                return "查看剧集"
+            default:
+                break
+            }
+        }
+
+        return selectedPlaybackTarget.actionTitle(playbackPositionText: item.playbackPositionText)
+    }
+
+    private var actionCardSummary: String {
+        if showsEpisodeBrowser, selectedPlaybackTarget == .app {
+            switch item.kind {
+            case .series:
+                return "保留应用内选集逻辑。点开后先看剧集列表，再进入具体播放。"
+            case .season:
+                return "保留应用内选集逻辑。点开后先看这一季的剧集列表，再进入具体播放。"
+            default:
+                break
+            }
+        }
+
+        return selectedPlaybackTarget.actionSummary(playbackPositionText: item.playbackPositionText)
+    }
+
+    private func handlePrimaryAction(proxy: ScrollViewProxy) async {
+        if showsEpisodeBrowser, selectedPlaybackTarget == .app {
+            withAnimation(.easeInOut(duration: 0.2)) {
+                proxy.scrollTo("episode-browser", anchor: .top)
+            }
+            return
+        }
+
+        await openPlaybackTarget(selectedPlaybackTarget)
+    }
+
+    private func openPlaybackTarget(_ target: JellyfinPlaybackOpenTarget) async {
+        do {
+            if target == .app {
+                guard isOpeningPlayback == false else {
+                    return
+                }
+
+                isOpeningPlayback = true
+                defer {
+                    isOpeningPlayback = false
+                }
+
+                let stream = try await appState.jellyfin.playbackStream(for: item.id)
+                internalPlayerSession = JellyfinInternalPlayerSession(
+                    title: item.name,
+                    streamURL: stream.url,
+                    routeText: stream.routeDescription,
+                    startPositionTicks: item.playbackPositionTicks
+                )
+                return
+            }
+
+            let url = try JellyfinExternalPlayback.targetURL(
+                for: target,
+                webURL: appState.jellyfin.webDetailsURL(for: item.id),
+                streamURL: item.canOpenInExternalPlayer ? appState.jellyfin.directVideoURL(for: item.id) : nil
+            )
+            openURL(url)
+        } catch {
+            playbackOpenErrorMessage = error.localizedDescription
+        }
+    }
+
+    private func toggleFavorite() async {
+        let targetValue = !isFavorite
+
+        do {
+            try await appState.jellyfin.setFavorite(itemID: item.id, isFavorite: targetValue)
+            isFavorite = targetValue
+        } catch {
+            favoriteErrorMessage = error.localizedDescription
+        }
+    }
+}
+
+private struct JellyfinInternalPlayerSession: Identifiable {
+    let title: String
+    let streamURL: URL
+    let routeText: String
+    let startPositionTicks: Int64?
+
+    var id: String {
+        "\(title)|\(streamURL.absoluteString)|\(routeText)|\(startPositionTicks ?? 0)"
     }
 }

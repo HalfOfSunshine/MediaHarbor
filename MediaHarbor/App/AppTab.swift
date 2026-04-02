@@ -1,17 +1,17 @@
 import Foundation
 
 enum AppTab: Hashable {
-    case home
     case library
+    case browser
     case downloads
     case settings
 
     var title: String {
         switch self {
-        case .home:
-            return "首页"
         case .library:
             return "媒体库"
+        case .browser:
+            return "浏览器"
         case .downloads:
             return "下载"
         case .settings:
@@ -21,10 +21,10 @@ enum AppTab: Hashable {
 
     var iconAssetName: String {
         switch self {
-        case .home:
-            return "TabHome"
         case .library:
             return "TabLibrary"
+        case .browser:
+            return "TabBrowser"
         case .downloads:
             return "TabDownloads"
         case .settings:
@@ -34,10 +34,10 @@ enum AppTab: Hashable {
 
     var selectedIconAssetName: String {
         switch self {
-        case .home:
-            return "TabHomeActive"
         case .library:
             return "TabLibraryActive"
+        case .browser:
+            return "TabBrowserActive"
         case .downloads:
             return "TabDownloadsActive"
         case .settings:
@@ -47,10 +47,10 @@ enum AppTab: Hashable {
 
     var fallbackSystemImage: String {
         switch self {
-        case .home:
-            return "house"
         case .library:
             return "film"
+        case .browser:
+            return "safari"
         case .downloads:
             return "arrow.down.circle"
         case .settings:
