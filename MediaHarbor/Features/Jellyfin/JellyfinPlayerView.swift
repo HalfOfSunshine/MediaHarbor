@@ -1,13 +1,13 @@
-import AVKit
+import MobileVLCKit
 import Observation
 import SwiftUI
+import UIKit
 
 struct JellyfinPlayerView: View {
     @Environment(\.dismiss) private var dismiss
 
     let title: String
-    let streamURL: URL
-    let routeText: String
+    let candidates: [JellyfinPlaybackCandidate]
     let startPositionTicks: Int64?
 
     @State private var controller = JellyfinPlayerController()
@@ -16,7 +16,7 @@ struct JellyfinPlayerView: View {
         ZStack(alignment: .topTrailing) {
             Color.black.ignoresSafeArea()
 
-            JellyfinAVPlayerViewController(player: controller.player)
+            JellyfinVLCPlayerSurface(controller: controller)
                 .ignoresSafeArea()
 
             VStack {
@@ -68,8 +68,8 @@ struct JellyfinPlayerView: View {
             .padding(.top, 16)
             .padding(.trailing, 18)
         }
-        .task(id: "\(streamURL.absoluteString)|\(startPositionTicks ?? 0)") {
-            controller.load(url: streamURL, routeText: routeText, startPositionTicks: startPositionTicks)
+        .task(id: candidateTaskID) {
+            controller.load(candidates: candidates, startPositionTicks: startPositionTicks)
         }
         .onDisappear {
             controller.reset()
@@ -77,13 +77,37 @@ struct JellyfinPlayerView: View {
         .statusBarHidden()
         .accessibilityIdentifier("jellyfin.player.screen")
     }
+
+    private var candidateTaskID: String {
+        let candidateKey = candidates
+            .map { "\($0.routeDescription)|\($0.url.absoluteString)" }
+            .joined(separator: "||")
+        return "\(candidateKey)|\(startPositionTicks ?? 0)"
+    }
+}
+
+private struct JellyfinVLCPlayerSurface: UIViewRepresentable {
+    let controller: JellyfinPlayerController
+
+    func makeUIView(context: Context) -> UIView {
+        let view = UIView()
+        view.backgroundColor = .black
+        controller.attachDrawable(view)
+        return view
+    }
+
+    func updateUIView(_ uiView: UIView, context: Context) {
+        controller.attachDrawable(uiView)
+    }
+
+    static func dismantleUIView(_ uiView: UIView, coordinator: ()) {
+        uiView.layer.sublayers?.removeAll()
+    }
 }
 
 @MainActor
 @Observable
-final class JellyfinPlayerController {
-    let player = AVPlayer()
-
+final class JellyfinPlayerController: NSObject, VLCMediaPlayerDelegate {
     var statusText = "正在初始化"
     var currentTimeText = "00:00"
     var durationText = "--:--"
@@ -92,108 +116,225 @@ final class JellyfinPlayerController {
     var startPositionText: String?
 
     @ObservationIgnored
-    private var periodicTimeObserver: Any?
+    private let player: VLCMediaPlayer
 
     @ObservationIgnored
-    private var itemStatusObservation: NSKeyValueObservation?
+    private weak var drawableView: UIView?
 
     @ObservationIgnored
-    private var timeControlObservation: NSKeyValueObservation?
+    private var pendingStartMilliseconds: Int32?
 
-    func load(url: URL, routeText: String, startPositionTicks: Int64?) {
+    @ObservationIgnored
+    private var didApplyInitialSeek = false
+
+    @ObservationIgnored
+    private var candidates: [JellyfinPlaybackCandidate] = []
+
+    @ObservationIgnored
+    private var currentCandidateIndex = 0
+
+    @ObservationIgnored
+    private var isSwitchingCandidate = false
+
+    override init() {
+        self.player = VLCMediaPlayer(options: [
+            "--no-video-title-show",
+            "--network-caching=1000",
+            "--clock-jitter=0",
+            "--clock-synchro=0",
+        ])
+        super.init()
+        player.delegate = self
+    }
+
+    deinit {
+        player.delegate = nil
+        player.stop()
+    }
+
+    func attachDrawable(_ view: UIView) {
+        guard drawableView !== view else { return }
+        drawableView = view
+        player.drawable = view
+    }
+
+    func load(candidates: [JellyfinPlaybackCandidate], startPositionTicks: Int64?) {
         reset()
 
-        self.routeText = routeText
-        startPositionText = JellyfinPlaybackFormatting.positionText(from: startPositionTicks)
-        statusText = "正在初始化"
-        isBuffering = true
-
-        let item = AVPlayerItem(url: url)
-        observe(playerItem: item, startPositionTicks: startPositionTicks)
-        player.replaceCurrentItem(with: item)
-        player.play()
+        self.candidates = candidates
+        self.startPositionText = JellyfinPlaybackFormatting.positionText(from: startPositionTicks)
+        self.pendingStartMilliseconds = Self.startMilliseconds(from: startPositionTicks)
+        self.didApplyInitialSeek = pendingStartMilliseconds == nil
+        self.statusText = "正在初始化"
+        self.isBuffering = true
+        self.currentTimeText = "00:00"
+        self.durationText = "--:--"
+        currentCandidateIndex = 0
+        playCurrentCandidate()
     }
 
     func reset() {
-        if let periodicTimeObserver {
-            player.removeTimeObserver(periodicTimeObserver)
-            self.periodicTimeObserver = nil
-        }
-
-        itemStatusObservation?.invalidate()
-        itemStatusObservation = nil
-        timeControlObservation?.invalidate()
-        timeControlObservation = nil
-
-        player.pause()
-        player.replaceCurrentItem(with: nil)
+        player.stop()
+        player.media = nil
+        candidates = []
+        currentCandidateIndex = 0
+        isSwitchingCandidate = false
+        pendingStartMilliseconds = nil
+        didApplyInitialSeek = false
+        statusText = "正在初始化"
+        isBuffering = true
+        currentTimeText = "00:00"
+        durationText = "--:--"
     }
 
-    private func observe(playerItem: AVPlayerItem, startPositionTicks: Int64?) {
-        itemStatusObservation = playerItem.observe(\.status, options: [.initial, .new]) { [weak self] item, _ in
-            Task { @MainActor [weak self] in
-                guard let self else { return }
-
-                switch item.status {
-                case .readyToPlay:
-                    if let startPositionTicks, startPositionTicks > 0 {
-                        let seconds = Double(startPositionTicks) / 10_000_000
-                        let time = CMTime(seconds: seconds, preferredTimescale: 600)
-                        self.player.seek(to: time, toleranceBefore: .zero, toleranceAfter: .zero)
-                    }
-
-                    self.durationText = Self.formattedTime(from: item.duration)
-                    self.statusText = "正在播放"
-                case .failed:
-                    self.statusText = item.error?.localizedDescription ?? "播放失败"
-                    self.isBuffering = false
-                default:
-                    self.statusText = "正在初始化"
-                }
-            }
-        }
-
-        timeControlObservation = player.observe(\.timeControlStatus, options: [.initial, .new]) { [weak self] player, _ in
-            Task { @MainActor [weak self] in
-                guard let self else { return }
-
-                switch player.timeControlStatus {
-                case .paused:
-                    if player.currentItem?.status == .readyToPlay {
-                        self.statusText = "已暂停"
-                    }
-                    self.isBuffering = false
-                case .waitingToPlayAtSpecifiedRate:
-                    self.statusText = "正在缓冲"
-                    self.isBuffering = true
-                case .playing:
-                    self.statusText = "正在播放"
-                    self.isBuffering = false
-                @unknown default:
-                    self.statusText = "正在初始化"
-                    self.isBuffering = true
-                }
-            }
-        }
-
-        periodicTimeObserver = player.addPeriodicTimeObserver(forInterval: CMTime(seconds: 0.5, preferredTimescale: 600), queue: .main) { [weak self] time in
-            guard let self else { return }
-            Task { @MainActor [weak self] in
-                guard let self else { return }
-                self.currentTimeText = Self.formattedTime(from: time)
-                if let duration = self.player.currentItem?.duration, duration.isNumeric {
-                    self.durationText = Self.formattedTime(from: duration)
-                }
-            }
+    nonisolated func mediaPlayerStateChanged(_ aNotification: Notification) {
+        Task { @MainActor in
+            updateForCurrentState()
         }
     }
 
-    private static func formattedTime(from time: CMTime) -> String {
-        guard time.isNumeric, time.seconds.isFinite, time.seconds >= 0 else {
+    nonisolated func mediaPlayerTimeChanged(_ aNotification: Notification) {
+        Task { @MainActor in
+            updatePlaybackClock()
+        }
+    }
+
+    private func updateForCurrentState() {
+        switch player.state {
+        case .opening:
+            statusText = "正在初始化"
+            isBuffering = true
+        case .buffering, .esAdded:
+            statusText = "正在缓冲"
+            isBuffering = true
+        case .playing:
+            statusText = "正在播放"
+            isBuffering = false
+            applyInitialSeekIfNeeded()
+            updatePlaybackClock()
+        case .paused:
+            statusText = "已暂停"
+            isBuffering = false
+            updatePlaybackClock()
+        case .ended:
+            statusText = "播放结束"
+            isBuffering = false
+            updatePlaybackClock()
+        case .error:
+            if tryAdvanceToNextCandidateIfNeeded() == false {
+                statusText = "播放失败"
+                isBuffering = false
+            }
+        case .stopped:
+            if player.media != nil {
+                if tryAdvanceToNextCandidateIfNeeded() == false {
+                    statusText = "已停止"
+                    isBuffering = false
+                }
+            }
+        default:
+            statusText = "正在初始化"
+            isBuffering = true
+        }
+    }
+
+    private func updatePlaybackClock() {
+        currentTimeText = Self.formattedTime(milliseconds: player.time.intValue)
+
+        if let mediaLength = player.media?.length.intValue, mediaLength > 0 {
+            durationText = Self.formattedTime(milliseconds: mediaLength)
+        } else if let remainingMilliseconds = player.remainingTime?.intValue, remainingMilliseconds < 0 {
+            durationText = Self.formattedTime(milliseconds: player.time.intValue - remainingMilliseconds)
+        }
+    }
+
+    private func applyInitialSeekIfNeeded() {
+        guard didApplyInitialSeek == false, let pendingStartMilliseconds, pendingStartMilliseconds > 0 else {
+            return
+        }
+
+        didApplyInitialSeek = true
+        player.time = VLCTime(int: pendingStartMilliseconds)
+    }
+
+    private func playCurrentCandidate() {
+        guard candidates.indices.contains(currentCandidateIndex) else {
+            statusText = "没有可用的播放地址"
+            isBuffering = false
+            return
+        }
+
+        let candidate = candidates[currentCandidateIndex]
+        routeText = candidate.routeDescription
+        statusText = currentCandidateIndex == 0 ? "正在初始化" : "正在切换备用播放路线"
+        isBuffering = true
+        currentTimeText = "00:00"
+        durationText = "--:--"
+        didApplyInitialSeek = pendingStartMilliseconds == nil
+
+        let media = VLCMedia(url: candidate.url)
+        player.media = media
+        if let drawableView {
+            player.drawable = drawableView
+        }
+        player.play()
+    }
+
+    private func tryAdvanceToNextCandidateIfNeeded() -> Bool {
+        guard isSwitchingCandidate == false else {
+            return false
+        }
+
+        guard shouldFallbackToNextCandidate else {
+            return false
+        }
+
+        let nextIndex = currentCandidateIndex + 1
+        guard candidates.indices.contains(nextIndex) else {
+            return false
+        }
+
+        isSwitchingCandidate = true
+        currentCandidateIndex = nextIndex
+        player.stop()
+        player.media = nil
+        playCurrentCandidate()
+        isSwitchingCandidate = false
+        return true
+    }
+
+    private var shouldFallbackToNextCandidate: Bool {
+        let currentMilliseconds = player.time.intValue
+        let mediaLength = player.media?.length.intValue ?? 0
+
+        if currentMilliseconds <= 2_000 {
+            return true
+        }
+
+        if mediaLength <= 0, currentMilliseconds <= 5_000 {
+            return true
+        }
+
+        return false
+    }
+
+    private static func startMilliseconds(from ticks: Int64?) -> Int32? {
+        guard let ticks, ticks > 0 else { return nil }
+
+        let milliseconds = ticks / 10_000
+        if milliseconds <= 0 {
+            return nil
+        }
+
+        return Int32(clamping: milliseconds)
+    }
+
+    private static func formattedTime(milliseconds: Int32) -> String {
+        guard milliseconds >= 0 else {
             return "--:--"
         }
 
-        let totalSeconds = Int(time.seconds.rounded(.down))
+        let totalSeconds = Int(milliseconds / 1000)
         let hours = totalSeconds / 3600
         let minutes = (totalSeconds % 3600) / 60
         let seconds = totalSeconds % 60
@@ -203,25 +344,5 @@ final class JellyfinPlayerController {
         }
 
         return String(format: "%02d:%02d", minutes, seconds)
-    }
-}
-
-private struct JellyfinAVPlayerViewController: UIViewControllerRepresentable {
-    let player: AVPlayer
-
-    func makeUIViewController(context: Context) -> AVPlayerViewController {
-        let controller = AVPlayerViewController()
-        controller.player = player
-        controller.view.backgroundColor = .black
-        controller.allowsPictureInPicturePlayback = true
-        controller.canStartPictureInPictureAutomaticallyFromInline = false
-        controller.updatesNowPlayingInfoCenter = false
-        return controller
-    }
-
-    func updateUIViewController(_ uiViewController: AVPlayerViewController, context: Context) {
-        if uiViewController.player !== player {
-            uiViewController.player = player
-        }
     }
 }

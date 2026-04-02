@@ -1,18 +1,22 @@
 PODS:
+  - MobileVLCKit (3.7.3)
   - SDWebImage (5.21.7):
     - SDWebImage/Core (= 5.21.7)
   - SDWebImage/Core (5.21.7)
 
 DEPENDENCIES:
+  - MobileVLCKit (= 3.7.3)
   - SDWebImage (~> 5.21)
 
 SPEC REPOS:
   trunk:
+    - MobileVLCKit
     - SDWebImage
 
 SPEC CHECKSUMS:
+  MobileVLCKit: 73d7ddb52238b6885b70b0f281cae75a0a6e3ac0
   SDWebImage: e9fc87c1aab89a8ab1bbd74eba378c6f53be8abf
 
-PODFILE CHECKSUM: f17371ed63962e1e73a8bd7f49c897230ccf14fb
+PODFILE CHECKSUM: d06eb3f205d5f36beb00b894e0d868bc05f6fa69
 
 COCOAPODS: 1.16.2

@@ -1,4 +1,5 @@
 import Foundation
+import AVFoundation
 import UIKit
 
 struct JellyfinAuthenticatedIdentity: Sendable {
@@ -8,6 +9,18 @@ struct JellyfinAuthenticatedIdentity: Sendable {
 }
 
 struct JellyfinPlaybackStream: Sendable {
+    let candidates: [JellyfinPlaybackCandidate]
+
+    var url: URL {
+        candidates[0].url
+    }
+
+    var routeDescription: String {
+        candidates[0].routeDescription
+    }
+}
+
+struct JellyfinPlaybackCandidate: Sendable, Equatable {
     let url: URL
     let routeDescription: String
 }
@@ -457,17 +470,36 @@ struct JellyfinAPIClient {
         return components.url
     }
 
-    func directVideoURL(baseURL: URL, itemID: String, token: String) -> URL? {
+    func directVideoURL(
+        baseURL: URL,
+        itemID: String,
+        token: String,
+        playSessionID: String? = nil,
+        mediaSourceID: String? = nil,
+        tag: String? = nil
+    ) -> URL? {
         let endpoint = baseURL.appendingPathComponent("Videos/\(itemID)/stream")
 
         guard var components = URLComponents(url: endpoint, resolvingAgainstBaseURL: false) else {
             return nil
         }
 
-        components.queryItems = [
+        var queryItems = [
             URLQueryItem(name: "static", value: "true"),
             URLQueryItem(name: "api_key", value: token),
         ]
+
+        if let playSessionID, playSessionID.isEmpty == false {
+            queryItems.append(URLQueryItem(name: "playSessionId", value: playSessionID))
+        }
+        if let mediaSourceID, mediaSourceID.isEmpty == false {
+            queryItems.append(URLQueryItem(name: "mediaSourceId", value: mediaSourceID))
+        }
+        if let tag, tag.isEmpty == false {
+            queryItems.append(URLQueryItem(name: "tag", value: tag))
+        }
+
+        components.queryItems = queryItems
         return components.url
     }
 
@@ -492,23 +524,53 @@ struct JellyfinAPIClient {
         )
 
         let response: PlaybackInfoResponseDTO = try await send(request)
+        let playSessionID = response.playSessionID
         let mediaSources = response.mediaSources ?? []
         let selectedSource = mediaSources.first
+        var candidates: [JellyfinPlaybackCandidate] = []
+
+        func appendCandidate(url: URL?, routeDescription: String) {
+            guard let url else {
+                return
+            }
+
+            if candidates.contains(where: { $0.url == url }) == false {
+                candidates.append(
+                    JellyfinPlaybackCandidate(url: url, routeDescription: routeDescription)
+                )
+            }
+        }
+
+        if selectedSource?.supportsDirectStream == true,
+           let directStreamURL = selectedSource?.directStreamURL,
+           let resolvedURL = resolvePlaybackURL(baseURL: baseURL, token: token, pathOrURL: directStreamURL)
+        {
+            appendCandidate(url: resolvedURL, routeDescription: "直接串流")
+        }
+
+        let directURL = directVideoURL(
+            baseURL: baseURL,
+            itemID: itemID,
+            token: token,
+            playSessionID: playSessionID,
+            mediaSourceID: selectedSource?.id ?? itemID,
+            tag: selectedSource?.eTag
+        )
+
+        if selectedSource?.supportsDirectPlay == true {
+            appendCandidate(url: directURL, routeDescription: "直接播放")
+        }
 
         if let transcodingURL = selectedSource?.transcodingURL,
            let resolvedURL = resolvePlaybackURL(baseURL: baseURL, token: token, pathOrURL: transcodingURL)
         {
-            return JellyfinPlaybackStream(url: resolvedURL, routeDescription: "服务器转码")
+            appendCandidate(url: resolvedURL, routeDescription: "服务器转码")
         }
 
-        if let directStreamURL = selectedSource?.directStreamURL,
-           let resolvedURL = resolvePlaybackURL(baseURL: baseURL, token: token, pathOrURL: directStreamURL)
-        {
-            return JellyfinPlaybackStream(url: resolvedURL, routeDescription: "直接串流")
-        }
+        appendCandidate(url: directURL, routeDescription: "直接播放")
 
-        if let fallbackURL = directVideoURL(baseURL: baseURL, itemID: itemID, token: token) {
-            return JellyfinPlaybackStream(url: fallbackURL, routeDescription: "直接播放")
+        if candidates.isEmpty == false {
+            return JellyfinPlaybackStream(candidates: candidates)
         }
 
         throw APIError.serverMessage("Jellyfin 没有返回可用的播放地址。")
@@ -756,22 +818,24 @@ private struct PlaybackDeviceProfileDTO: Encodable {
     let directPlayProfiles: [PlaybackDirectPlayProfileDTO]
     let transcodingProfiles: [PlaybackTranscodingProfileDTO]
     let subtitleProfiles: [PlaybackSubtitleProfileDTO]
+    let codecProfiles: [PlaybackCodecProfileDTO]
 
     enum CodingKeys: String, CodingKey {
         case name = "Name"
         case directPlayProfiles = "DirectPlayProfiles"
         case transcodingProfiles = "TranscodingProfiles"
         case subtitleProfiles = "SubtitleProfiles"
+        case codecProfiles = "CodecProfiles"
     }
 
     static let mediaHarborDefault = PlaybackDeviceProfileDTO(
         name: "MediaHarbor",
         directPlayProfiles: [
             PlaybackDirectPlayProfileDTO(
-                container: "mp4,m4v,mov",
+                container: "mp4,m4v,mov,mkv,webm,avi,ts,m2ts",
                 type: "Video",
-                videoCodec: "h264",
-                audioCodec: "aac,ac3,eac3,mp3"
+                videoCodec: "h264,hevc,av1,vp8,vp9,mpeg4,mpeg2video,vc1,prores,dirac,dv,ffv1,flv1,h261,h263,mjpeg,msmpeg4v1,msmpeg4v2,msmpeg4v3,theora,wmv1,wmv2,wmv3",
+                audioCodec: "aac,ac3,alac,amr_nb,amr_wb,dts,eac3,flac,mp1,mp2,mp3,nellymoser,opus,pcm_alaw,pcm_bluray,pcm_dvd,pcm_mulaw,pcm_s16be,pcm_s16le,pcm_s24be,pcm_s24le,pcm_u8,speex,vorbis,wavpack,wmalossless,wmapro,wmav1,wmav2"
             ),
         ],
         transcodingProfiles: [
@@ -790,7 +854,8 @@ private struct PlaybackDeviceProfileDTO: Encodable {
         ],
         subtitleProfiles: [
             PlaybackSubtitleProfileDTO(format: "vtt", method: "Hls"),
-        ]
+        ],
+        codecProfiles: PlaybackCodecProfileDTO.mediaHarborDefault
     )
 }
 
@@ -846,20 +911,98 @@ private struct PlaybackSubtitleProfileDTO: Encodable {
 
 private struct PlaybackInfoResponseDTO: Decodable {
     let mediaSources: [PlaybackMediaSourceDTO]?
+    let playSessionID: String?
 
     enum CodingKeys: String, CodingKey {
         case mediaSources = "MediaSources"
+        case playSessionID = "PlaySessionId"
     }
 }
 
 private struct PlaybackMediaSourceDTO: Decodable {
+    let id: String?
+    let eTag: String?
     let transcodingURL: String?
     let directStreamURL: String?
+    let supportsDirectPlay: Bool?
+    let supportsDirectStream: Bool?
 
     enum CodingKeys: String, CodingKey {
+        case id = "Id"
+        case eTag = "ETag"
         case transcodingURL = "TranscodingUrl"
         case directStreamURL = "DirectStreamUrl"
+        case supportsDirectPlay = "SupportsDirectPlay"
+        case supportsDirectStream = "SupportsDirectStream"
     }
+}
+
+private struct PlaybackCodecProfileDTO: Encodable {
+    let codec: String
+    let type: String
+    let conditions: [PlaybackProfileConditionDTO]
+
+    enum CodingKeys: String, CodingKey {
+        case codec = "Codec"
+        case type = "Type"
+        case conditions = "Conditions"
+    }
+
+    static let mediaHarborDefault: [PlaybackCodecProfileDTO] = [
+        PlaybackCodecProfileDTO(
+            codec: "h264",
+            type: "Video",
+            conditions: PlaybackProfileConditionDTO.h264Base + [
+                PlaybackProfileConditionDTO(
+                    condition: "EqualsAny",
+                    isRequired: false,
+                    property: "VideoRangeType",
+                    value: "SDR|DOVIWithSDR"
+                ),
+            ]
+        ),
+        PlaybackCodecProfileDTO(
+            codec: "hevc",
+            type: "Video",
+            conditions: PlaybackProfileConditionDTO.hevcBase + [
+                PlaybackProfileConditionDTO(
+                    condition: "EqualsAny",
+                    isRequired: false,
+                    property: "VideoRangeType",
+                    value: "SDR|HLG|HDR10|HDR10Plus|DOVIWithSDR|DOVIWithHLG|DOVIWithHDR10|DOVIWithHDR10Plus|DOVIWithELHDR10Plus"
+                ),
+            ]
+        ),
+    ]
+}
+
+private struct PlaybackProfileConditionDTO: Encodable {
+    let condition: String
+    let isRequired: Bool
+    let property: String
+    let value: String
+
+    enum CodingKeys: String, CodingKey {
+        case condition = "Condition"
+        case isRequired = "IsRequired"
+        case property = "Property"
+        case value = "Value"
+    }
+
+    static let h264Base: [PlaybackProfileConditionDTO] = [
+        PlaybackProfileConditionDTO(condition: "NotEquals", isRequired: false, property: "IsAnamorphic", value: "true"),
+        PlaybackProfileConditionDTO(condition: "EqualsAny", isRequired: false, property: "VideoProfile", value: "high|main|baseline|constrained baseline"),
+        PlaybackProfileConditionDTO(condition: "LessThanEqual", isRequired: false, property: "VideoLevel", value: "80"),
+        PlaybackProfileConditionDTO(condition: "NotEquals", isRequired: false, property: "IsInterlaced", value: "true"),
+    ]
+
+    static let hevcBase: [PlaybackProfileConditionDTO] = [
+        PlaybackProfileConditionDTO(condition: "NotEquals", isRequired: false, property: "IsAnamorphic", value: "true"),
+        PlaybackProfileConditionDTO(condition: "EqualsAny", isRequired: false, property: "VideoProfile", value: "main|main 10"),
+        PlaybackProfileConditionDTO(condition: "LessThanEqual", isRequired: false, property: "VideoLevel", value: "175"),
+        PlaybackProfileConditionDTO(condition: "NotEquals", isRequired: false, property: "IsInterlaced", value: "true"),
+    ]
+
 }
 
 private struct UserDTO: Decodable {

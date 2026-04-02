@@ -982,8 +982,7 @@ struct JellyfinMovieDetailView: View {
         .fullScreenCover(item: $internalPlayerSession) { session in
             JellyfinPlayerView(
                 title: session.title,
-                streamURL: session.streamURL,
-                routeText: session.routeText,
+                candidates: session.candidates,
                 startPositionTicks: session.startPositionTicks
             )
         }
@@ -1004,8 +1003,7 @@ struct JellyfinMovieDetailView: View {
                 let stream = try await appState.jellyfin.playbackStream(for: movie.id)
                 internalPlayerSession = JellyfinInternalPlayerSession(
                     title: movie.name,
-                    streamURL: stream.url,
-                    routeText: stream.routeDescription,
+                    candidates: stream.candidates,
                     startPositionTicks: movie.playbackPositionTicks
                 )
                 return
@@ -1162,8 +1160,7 @@ struct JellyfinLibraryItemDetailView: View {
         .fullScreenCover(item: $internalPlayerSession) { session in
             JellyfinPlayerView(
                 title: session.title,
-                streamURL: session.streamURL,
-                routeText: session.routeText,
+                candidates: session.candidates,
                 startPositionTicks: session.startPositionTicks
             )
         }
@@ -1265,8 +1262,7 @@ struct JellyfinLibraryItemDetailView: View {
                 let stream = try await appState.jellyfin.playbackStream(for: item.id)
                 internalPlayerSession = JellyfinInternalPlayerSession(
                     title: item.name,
-                    streamURL: stream.url,
-                    routeText: stream.routeDescription,
+                    candidates: stream.candidates,
                     startPositionTicks: item.playbackPositionTicks
                 )
                 return
@@ -1297,11 +1293,12 @@ struct JellyfinLibraryItemDetailView: View {
 
 private struct JellyfinInternalPlayerSession: Identifiable {
     let title: String
-    let streamURL: URL
-    let routeText: String
+    let candidates: [JellyfinPlaybackCandidate]
     let startPositionTicks: Int64?
 
     var id: String {
-        "\(title)|\(streamURL.absoluteString)|\(routeText)|\(startPositionTicks ?? 0)"
+        let routeKey = candidates.map(\.routeDescription).joined(separator: "|")
+        let urlKey = candidates.map(\.url.absoluteString).joined(separator: "|")
+        return "\(title)|\(routeKey)|\(urlKey)|\(startPositionTicks ?? 0)"
     }
 }

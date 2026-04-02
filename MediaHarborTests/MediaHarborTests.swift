@@ -247,6 +247,40 @@ struct MediaHarborTests {
     }
 
     @Test
+    func jellyfinDirectVideoURLIncludesPlaySessionAndMediaSourceWhenProvided() async throws {
+        let client = JellyfinAPIClient()
+        let baseURL = try #require(URL(string: "http://router.mingkang.uk:8096"))
+        let url = client.directVideoURL(
+            baseURL: baseURL,
+            itemID: "abc",
+            token: "token-1",
+            playSessionID: "session-1",
+            mediaSourceID: "source-1",
+            tag: "etag-1"
+        )
+
+        #expect(
+            url?.absoluteString ==
+            "http://router.mingkang.uk:8096/Videos/abc/stream?static=true&api_key=token-1&playSessionId=session-1&mediaSourceId=source-1&tag=etag-1"
+        )
+    }
+
+    @Test
+    func jellyfinPlaybackStreamUsesFirstCandidateAsPrimaryRoute() async throws {
+        let directURL = try #require(URL(string: "http://router.mingkang.uk:8096/Videos/abc/stream?static=true&api_key=token-1"))
+        let transcodeURL = try #require(URL(string: "http://router.mingkang.uk:8096/videos/abc/master.m3u8?api_key=token-1"))
+        let stream = JellyfinPlaybackStream(
+            candidates: [
+                JellyfinPlaybackCandidate(url: directURL, routeDescription: "直接播放"),
+                JellyfinPlaybackCandidate(url: transcodeURL, routeDescription: "服务器转码"),
+            ]
+        )
+
+        #expect(stream.url == directURL)
+        #expect(stream.routeDescription == "直接播放")
+    }
+
+    @Test
     func jellyfinPlaybackPreferencesDefaultToAppPlayback() async throws {
         let suiteName = "MediaHarborTests.JellyfinPlaybackPreferences"
         let defaults = try #require(UserDefaults(suiteName: suiteName))
