@@ -197,7 +197,11 @@ struct BrowserWebView: UIViewRepresentable {
             switch message.name {
             case "mediaHarborLocation":
                 if let payload = message.body as? [String: Any] {
-                    latestSnapshot.currentURLString = payload["href"] as? String ?? latestSnapshot.currentURLString
+                    let newURLString = payload["href"] as? String ?? latestSnapshot.currentURLString
+                    if latestSnapshot.currentURLString != newURLString {
+                        latestSnapshot.resources = []
+                    }
+                    latestSnapshot.currentURLString = newURLString
                     latestSnapshot.pageTitle = payload["title"] as? String ?? latestSnapshot.pageTitle
                     pushSnapshot()
                 }
@@ -273,6 +277,9 @@ private func makeBrowserInstrumentationScript() -> String {
       window.__mediaHarborInstalled = true;
       window.__mediaHarborMTeamListResources = [];
       window.__mediaHarborMTeamDetailResources = [];
+      window.__mediaHarborMTeamOtherVersionResources = [];
+      window.__mediaHarborMTeamLastLocation = location.href;
+      window.__mediaHarborEmitStateTimer = 0;
 
       function safePost(name, payload) {
         try {
@@ -345,6 +352,7 @@ private func makeBrowserInstrumentationScript() -> String {
         const detailsURLString = textValue(input.detailsURLString);
         const downloadURLString = textValue(input.downloadURLString);
         const torrentID = textValue(input.torrentID);
+        const isFree = Boolean(input.isFree);
 
         if (!title) return null;
         if (!detailsURLString && !downloadURLString && !torrentID) return null;
@@ -356,7 +364,8 @@ private func makeBrowserInstrumentationScript() -> String {
           detailsURLString: detailsURLString,
           downloadURLString: downloadURLString,
           imageURLString: textValue(input.imageURLString),
-          torrentID: torrentID
+          torrentID: torrentID,
+          isFree: isFree
         };
       }
 
@@ -370,6 +379,7 @@ private func makeBrowserInstrumentationScript() -> String {
           if (textValue(item.imageURLString)) total += 20;
           if (textValue(item.detailsURLString)) total += 10;
           if (textValue(item.downloadURLString)) total += 10;
+          if (item.isFree) total += 15;
           return total;
         }
 
@@ -379,9 +389,10 @@ private func makeBrowserInstrumentationScript() -> String {
 
           const existingIndex = indexByID.get(item.id);
           if (existingIndex !== undefined) {
-            if (score(item) > score(normalized[existingIndex])) {
-              normalized[existingIndex] = item;
-            }
+            const existingItem = normalized[existingIndex];
+            const mergedItem = score(item) > score(existingItem) ? item : existingItem;
+            mergedItem.isFree = Boolean(item.isFree || existingItem.isFree);
+            normalized[existingIndex] = mergedItem;
             continue;
           }
 
@@ -397,6 +408,43 @@ private func makeBrowserInstrumentationScript() -> String {
 
       function currentMTeamDetailResources() {
         return Array.isArray(window.__mediaHarborMTeamDetailResources) ? window.__mediaHarborMTeamDetailResources : [];
+      }
+
+      function isMTeamDetailPageURL(value) {
+        return /#\/torrent\/\d+(?:[/?#].*)?$/i.test(String(value || ""));
+      }
+
+      function isMTeamListPageURL(value) {
+        return /#\/torrents(?:[/?#].*)?$/i.test(String(value || ""));
+      }
+
+      function currentMTeamRouteKind() {
+        if (isMTeamDetailPageURL(location.href)) return "detail";
+        if (isMTeamListPageURL(location.href)) return "list";
+        return "other";
+      }
+
+      function resetMTeamRouteCaches() {
+        window.__mediaHarborMTeamListResources = [];
+        window.__mediaHarborMTeamDetailResources = [];
+        window.__mediaHarborMTeamOtherVersionResources = [];
+      }
+
+      function syncMTeamRouteState() {
+        if (!/m-team/i.test(location.hostname)) return;
+        if (window.__mediaHarborMTeamLastLocation === location.href) return;
+        window.__mediaHarborMTeamLastLocation = location.href;
+        resetMTeamRouteCaches();
+      }
+
+      function isVisibleNode(node) {
+        if (!node) return false;
+        const element = node.nodeType === 1 ? node : node.parentElement;
+        if (!element || !element.getClientRects) return false;
+        if (element.closest && element.closest("[hidden], [aria-hidden='true']")) return false;
+        const style = window.getComputedStyle ? window.getComputedStyle(element) : null;
+        if (style && (style.display === "none" || style.visibility === "hidden")) return false;
+        return element.getClientRects().length > 0;
       }
 
       function buildDetailURL(torrentID) {
@@ -421,11 +469,46 @@ private func makeBrowserInstrumentationScript() -> String {
         return "";
       }
 
+      function mTeamDateValue(value) {
+        const raw = textValue(value);
+        if (!raw) return NaN;
+        const normalized = /[zZ]|[+-]\d{2}:\d{2}$/.test(raw) ? raw : raw.replace(" ", "T") + "+08:00";
+        const timestamp = Date.parse(normalized);
+        return Number.isNaN(timestamp) ? NaN : timestamp;
+      }
+
+      function currentMTeamPromotionState(status) {
+        if (!status || typeof status !== "object") {
+          return { isFree: false };
+        }
+
+        let effectiveDiscount = textValue(status.discount);
+        const promotionRule = status.promotionRule;
+        if (promotionRule && typeof promotionRule === "object" && promotionRule.startTime) {
+          const startTimestamp = mTeamDateValue(promotionRule.startTime);
+          if (!Number.isNaN(startTimestamp) && startTimestamp <= Date.now()) {
+            effectiveDiscount = textValue(promotionRule.discount) || effectiveDiscount;
+          }
+        }
+
+        const mallSingleFree = status.mallSingleFree;
+        const isMallSingleFree =
+          mallSingleFree &&
+          textValue(mallSingleFree.status).toUpperCase() === "ONGOING";
+
+        return {
+          isFree: /FREE/i.test(effectiveDiscount) || Boolean(isMallSingleFree)
+        };
+      }
+
       function scanDOMResources() {
         const results = [];
         const nodes = Array.from(document.querySelectorAll("a[href], [data-id], [data-torrent-id], [data-row-key], [onclick]"));
 
         nodes.forEach(function(node) {
+          const container = candidateContainer(node) || node;
+          if (!isVisibleNode(container)) return;
+
           const href = absoluteURL(node.getAttribute && node.getAttribute("href") || "");
           const dataset = node.dataset || {};
           const onclick = node.getAttribute && node.getAttribute("onclick") || "";
@@ -451,6 +534,7 @@ private func makeBrowserInstrumentationScript() -> String {
         });
 
         if (/m-team/i.test(location.hostname)) {
+          const routeKind = currentMTeamRouteKind();
           const currentTorrentID = extractTorrentId(location.href);
           if (currentTorrentID) {
             const detailResources = currentMTeamDetailResources().filter(function(item) {
@@ -470,16 +554,86 @@ private func makeBrowserInstrumentationScript() -> String {
             }]);
           }
 
-          const networkResources = currentMTeamListResources();
-          if (networkResources.length) {
-            return mergeResources(networkResources);
+          if (routeKind === "list") {
+            return mergeResources(currentMTeamListResources());
           }
         }
 
         return mergeResources(results);
       }
 
-      function collectMTeamNetworkResources(payload, requestURL) {
+      function requestPayloadObject(body) {
+        if (!body) return null;
+
+        if (typeof body === "string") {
+          try {
+            return JSON.parse(body);
+          } catch (error) {
+            return null;
+          }
+        }
+
+        if (typeof URLSearchParams !== "undefined" && body instanceof URLSearchParams) {
+          const result = {};
+          body.forEach(function(value, key) {
+            result[key] = value;
+          });
+          return result;
+        }
+
+        if (typeof FormData !== "undefined" && body instanceof FormData) {
+          const result = {};
+          body.forEach(function(value, key) {
+            result[key] = value;
+          });
+          return result;
+        }
+
+        if (typeof body === "object" && !Array.isArray(body)) {
+          return body;
+        }
+
+        return null;
+      }
+
+      function requestHasAnyKey(payload, keys) {
+        if (!payload || typeof payload !== "object") return false;
+        return keys.some(function(key) {
+          return Object.prototype.hasOwnProperty.call(payload, key);
+        });
+      }
+
+      function classifyMTeamRequest(requestURL, requestBody) {
+        const url = String(requestURL || "");
+        if (/\/torrent\/detail\b/i.test(url)) {
+          return "detail";
+        }
+        if (!/\/torrent\/search\b/i.test(url)) {
+          return "other";
+        }
+
+        const payload = requestPayloadObject(requestBody);
+        if (!payload) {
+          return "search";
+        }
+
+        const listKeys = ["mode", "visible", "keyword", "categories", "standards", "sources", "onlyFav"];
+        const isListRequest = requestHasAnyKey(payload, listKeys);
+        const isOtherVersionsRequest =
+          requestHasAnyKey(payload, ["imdb", "douban"]) &&
+          requestHasAnyKey(payload, ["sortField", "sortDirection"]) &&
+          !isListRequest;
+
+        if (isOtherVersionsRequest) {
+          return "otherVersions";
+        }
+        if (isListRequest) {
+          return "list";
+        }
+        return "search";
+      }
+
+      function collectMTeamNetworkResources(payload, requestURL, requestBody) {
         const results = [];
 
         function looksLikeTorrentItem(value, torrentID, title, subtitle) {
@@ -505,6 +659,7 @@ private func makeBrowserInstrumentationScript() -> String {
           const title = textValue(value.name || value.title);
           const subtitle = textValue(value.smallDescr || value.small_descr || value.subtitle || value.subTitle);
           const image = textValue(value.cover || value.poster || value.image || value.pic || value.smallPic || value.small_pic);
+          const promotionState = currentMTeamPromotionState(value.status);
 
           if (looksLikeTorrentItem(value, torrentID, title, subtitle)) {
             results.push({
@@ -514,7 +669,8 @@ private func makeBrowserInstrumentationScript() -> String {
               detailsURLString: buildDetailURL(torrentID),
               downloadURLString: "",
               imageURLString: absoluteURL(image),
-              torrentID: torrentID
+              torrentID: torrentID,
+              isFree: promotionState.isFree
             });
           }
 
@@ -525,12 +681,15 @@ private func makeBrowserInstrumentationScript() -> String {
 
         visit(payload);
         const normalized = mergeResources(results);
-        if (/\/torrent\/detail\b|\/torrent\/\d+(?:\b|[/?#])/i.test(requestURL || "")) {
+        const requestKind = classifyMTeamRequest(requestURL, requestBody);
+        const routeKind = currentMTeamRouteKind();
+
+        if (requestKind === "detail" && routeKind === "detail") {
           window.__mediaHarborMTeamDetailResources = normalized;
-        } else if (/\/torrent\/search\b/i.test(requestURL || "")) {
+        } else if (requestKind === "list" && routeKind === "list") {
           window.__mediaHarborMTeamListResources = normalized;
-        } else if (/\/torrent\//i.test(requestURL || "")) {
-          window.__mediaHarborMTeamListResources = normalized;
+        } else if (requestKind === "otherVersions" && routeKind === "detail") {
+          window.__mediaHarborMTeamOtherVersionResources = normalized;
         }
         emitState();
       }
@@ -540,12 +699,28 @@ private func makeBrowserInstrumentationScript() -> String {
 
         const originalFetch = window.fetch;
         window.fetch = function() {
+          const input = arguments[0];
+          const init = arguments[1];
+          const requestBodyPromise = (function() {
+            try {
+              if (init && Object.prototype.hasOwnProperty.call(init, "body")) {
+                return Promise.resolve(init.body);
+              }
+              if (typeof Request !== "undefined" && input instanceof Request) {
+                return input.clone().text().catch(function() { return ""; });
+              }
+            } catch (error) {}
+            return Promise.resolve("");
+          })();
+
           return originalFetch.apply(this, arguments).then(function(response) {
             try {
               const requestURL = response.url || "";
               if (/\/torrent\//i.test(requestURL)) {
                 response.clone().json().then(function(payload) {
-                  collectMTeamNetworkResources(payload, requestURL);
+                  requestBodyPromise.then(function(requestBody) {
+                    collectMTeamNetworkResources(payload, requestURL, requestBody);
+                  }).catch(function(){});
                 }).catch(function(){});
               }
             } catch (error) {}
@@ -560,11 +735,12 @@ private func makeBrowserInstrumentationScript() -> String {
           return originalOpen.apply(this, arguments);
         };
         XMLHttpRequest.prototype.send = function() {
+          this.__mediaHarborBody = arguments[0];
           this.addEventListener("load", function() {
             try {
               const requestURL = this.responseURL || this.__mediaHarborURL || "";
               if (/\/torrent\//i.test(requestURL)) {
-                collectMTeamNetworkResources(JSON.parse(this.responseText), requestURL);
+                collectMTeamNetworkResources(JSON.parse(this.responseText), requestURL, this.__mediaHarborBody);
               }
             } catch (error) {}
           });
@@ -573,8 +749,19 @@ private func makeBrowserInstrumentationScript() -> String {
       }
 
       function emitState() {
+        syncMTeamRouteState();
         safePost("mediaHarborLocation", { href: location.href, title: document.title || "" });
         safePost("mediaHarborResources", scanDOMResources());
+      }
+
+      function scheduleEmitState(delay) {
+        if (window.__mediaHarborEmitStateTimer) {
+          clearTimeout(window.__mediaHarborEmitStateTimer);
+        }
+        window.__mediaHarborEmitStateTimer = setTimeout(function() {
+          window.__mediaHarborEmitStateTimer = 0;
+          emitState();
+        }, delay || 0);
       }
 
       window.__mediaHarborEmitState = emitState;
@@ -582,22 +769,54 @@ private func makeBrowserInstrumentationScript() -> String {
       const originalPushState = history.pushState;
       history.pushState = function() {
         const result = originalPushState.apply(this, arguments);
-        setTimeout(emitState, 120);
+        scheduleEmitState(80);
+        setTimeout(emitState, 260);
+        setTimeout(emitState, 700);
         return result;
       };
 
       const originalReplaceState = history.replaceState;
       history.replaceState = function() {
         const result = originalReplaceState.apply(this, arguments);
-        setTimeout(emitState, 120);
+        scheduleEmitState(80);
+        setTimeout(emitState, 260);
+        setTimeout(emitState, 700);
         return result;
       };
 
+      const observer = new MutationObserver(function() {
+        scheduleEmitState(180);
+      });
+
+      function startObserver() {
+        if (!document.documentElement) return;
+        observer.observe(document.documentElement, {
+          childList: true,
+          subtree: true,
+          attributes: true,
+          characterData: false
+        });
+      }
+
       observeMTeamNetwork();
-      window.addEventListener("load", function() { setTimeout(emitState, 200); });
-      window.addEventListener("hashchange", function() { setTimeout(emitState, 120); });
-      window.addEventListener("popstate", function() { setTimeout(emitState, 120); });
-      document.addEventListener("readystatechange", function() { setTimeout(emitState, 200); });
+      startObserver();
+      window.addEventListener("load", function() {
+        scheduleEmitState(120);
+        setTimeout(emitState, 400);
+      });
+      window.addEventListener("hashchange", function() {
+        scheduleEmitState(80);
+        setTimeout(emitState, 260);
+        setTimeout(emitState, 700);
+      });
+      window.addEventListener("popstate", function() {
+        scheduleEmitState(80);
+        setTimeout(emitState, 260);
+        setTimeout(emitState, 700);
+      });
+      document.addEventListener("readystatechange", function() {
+        scheduleEmitState(160);
+      });
       setTimeout(emitState, 400);
     })();
     """#
@@ -629,7 +848,8 @@ private extension BrowserWebView {
             detailsURLString: payload["detailsURLString"] as? String,
             downloadURLString: payload["downloadURLString"] as? String,
             imageURLString: payload["imageURLString"] as? String,
-            torrentID: payload["torrentID"] as? String
+            torrentID: payload["torrentID"] as? String,
+            isFree: payload["isFree"] as? Bool ?? false
         )
     }
 }

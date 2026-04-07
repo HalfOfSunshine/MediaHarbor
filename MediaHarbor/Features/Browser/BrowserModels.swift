@@ -137,6 +137,7 @@ struct BrowserResource: Identifiable, Equatable, Sendable {
     let downloadURLString: String?
     let imageURLString: String?
     let torrentID: String?
+    let isFree: Bool
 
     var canSendToDownloader: Bool {
         let trimmedDownloadURL = downloadURLString?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""

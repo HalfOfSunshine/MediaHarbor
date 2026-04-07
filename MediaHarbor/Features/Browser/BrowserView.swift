@@ -662,6 +662,10 @@ private struct BrowserResourceAssistantView: View {
 
     private let resolver = BrowserPTResourceResolver()
 
+    private var freeResources: [BrowserResource] {
+        resources.filter { $0.isFree }
+    }
+
     var body: some View {
         NavigationStack {
             VStack(spacing: 0) {
@@ -684,20 +688,37 @@ private struct BrowserResourceAssistantView: View {
                 } else {
                     List {
                         Section("选择") {
-                            HStack {
-                                Text("已选 \(selectedResourceIDs.count) / \(resources.count)")
-                                    .foregroundStyle(.secondary)
-                                Spacer()
-                                Button("全选") {
-                                    selectedResourceIDs = Set(resources.map(\.id))
+                            VStack(alignment: .leading, spacing: 10) {
+                                HStack {
+                                    Text("已选 \(selectedResourceIDs.count) / \(resources.count)")
+                                        .foregroundStyle(.secondary)
+                                    Spacer()
                                 }
-                                Button("全不选") {
-                                    selectedResourceIDs.removeAll()
+
+                                HStack(spacing: 8) {
+                                    Button("全选") {
+                                        selectAllResources()
+                                    }
+
+                                    Button("全不选") {
+                                        clearSelectedResources()
+                                    }
+
+                                    if freeResources.isEmpty == false {
+                                        Button("全选 Free") {
+                                            selectFreeResources()
+                                        }
+                                    }
                                 }
+                                .buttonStyle(.bordered)
+                                .controlSize(.small)
                             }
 
                             if resources.count == 1 {
                                 Text("当前只有 1 个资源。点右上角“发送到 qB”后才会真正投递。")
+                                    .foregroundStyle(.secondary)
+                            } else if freeResources.isEmpty == false {
+                                Text("当前检测到 \(freeResources.count) 个 Free 资源，可直接用“全选 Free”。")
                                     .foregroundStyle(.secondary)
                             }
                         }
@@ -776,6 +797,18 @@ private struct BrowserResourceAssistantView: View {
         } else {
             selectedResourceIDs.insert(resource.id)
         }
+    }
+
+    private func selectAllResources() {
+        selectedResourceIDs = Set(resources.map(\.id))
+    }
+
+    private func clearSelectedResources() {
+        selectedResourceIDs.removeAll()
+    }
+
+    private func selectFreeResources() {
+        selectedResourceIDs = Set(freeResources.map(\.id))
     }
 
     private func openDetails(for resource: BrowserResource) {
@@ -863,6 +896,18 @@ private struct BrowserResourceRow: View {
             }
 
             VStack(alignment: .leading, spacing: 6) {
+                if resource.isFree {
+                    Text("FREE")
+                        .font(.caption2.weight(.bold))
+                        .foregroundStyle(.white)
+                        .padding(.horizontal, 8)
+                        .padding(.vertical, 4)
+                        .background(
+                            Capsule(style: .continuous)
+                                .fill(Color.green)
+                        )
+                }
+
                 Text(resource.title)
                     .font(.headline)
                     .multilineTextAlignment(.leading)
@@ -882,6 +927,7 @@ private struct BrowserResourceRow: View {
                 if resource.detailsURLString != nil {
                     Button("打开详情", action: onOpenDetails)
                         .font(.footnote.weight(.semibold))
+                        .buttonStyle(.plain)
                 }
             }
         }
