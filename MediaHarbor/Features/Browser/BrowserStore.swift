@@ -31,7 +31,6 @@ final class BrowserStore {
     @ObservationIgnored
     private let decoder = JSONDecoder()
 
-    @ObservationIgnored
     private var pageSnapshots: [String: BrowserPageSnapshot] = [:]
 
     @ObservationIgnored

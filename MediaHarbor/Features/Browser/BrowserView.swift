@@ -182,9 +182,15 @@ private struct BrowserAddressToolbar: View {
 
     var body: some View {
         HStack(spacing: 10) {
-            if isAddressFocused {
-                addressField
+            if isAddressFocused == false {
+                BrowserToolbarIconButton(systemName: "chevron.left", isEnabled: canGoBack, action: onBack)
+                BrowserToolbarIconButton(systemName: "chevron.right", isEnabled: canGoForward, action: onForward)
+                BrowserToolbarIconButton(systemName: "house", isEnabled: true, action: onHome)
+            }
 
+            addressField
+
+            if isAddressFocused {
                 Button("取消") {
                     addressText = displayedURLString
                     isAddressFocused = false
@@ -193,27 +199,24 @@ private struct BrowserAddressToolbar: View {
                 .foregroundStyle(MediaHarborTheme.tabSelectedColor)
                 .buttonStyle(.plain)
             } else {
-                BrowserToolbarIconButton(systemName: "chevron.left", isEnabled: canGoBack, action: onBack)
-                BrowserToolbarIconButton(systemName: "chevron.right", isEnabled: canGoForward, action: onForward)
-                BrowserToolbarIconButton(systemName: "house", isEnabled: true, action: onHome)
-
-                addressField
-
                 BrowserToolbarIconButton(systemName: "arrow.clockwise", isEnabled: true, action: onReload)
                 BrowserToolbarIconButton(systemName: "person.text.rectangle", isEnabled: true, action: onAutofill)
-
                 BrowserToolbarIconButton(systemName: "gearshape", isEnabled: true, action: onOpenSettings)
             }
         }
         .padding(.horizontal, 16)
         .padding(.bottom, 10)
-        .animation(.easeInOut(duration: 0.18), value: isAddressFocused)
         .onAppear {
             addressText = displayedURLString
         }
         .onChange(of: displayedURLString) { _, newValue in
             if isAddressFocused == false {
                 addressText = newValue
+            }
+        }
+        .onChange(of: isAddressFocused) { _, focused in
+            if focused {
+                addressText = displayedURLString
             }
         }
     }
@@ -226,11 +229,6 @@ private struct BrowserAddressToolbar: View {
             .textContentType(.URL)
             .focused($isAddressFocused)
             .submitLabel(.go)
-            .onTapGesture {
-                if isAddressFocused == false {
-                    addressText = displayedURLString
-                }
-            }
             .onSubmit {
                 onSubmitAddress(addressText)
                 isAddressFocused = false

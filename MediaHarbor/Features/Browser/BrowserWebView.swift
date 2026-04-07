@@ -301,6 +301,7 @@ private func makeBrowserInstrumentationScript() -> String {
           /(?:^|[/?])details?\.php\?[^#]*\bid=(\d+)/i,
           /\/detail\/(\d+)/i,
           /#\/detail\?[^#]*\bid=(\d+)/i,
+          /#\/torrent\/(\d+)(?:[/?#].*)?$/i,
           /#\/(\d+)(?:\?.*)?$/i,
           /(?:^|[/?])download(?:_notice)?\.php\?[^#]*\bid=(\d+)/i
         ];
@@ -360,13 +361,31 @@ private func makeBrowserInstrumentationScript() -> String {
       }
 
       function mergeResources(resources) {
-        const seen = new Set();
+        const indexByID = new Map();
         const normalized = [];
+
+        function score(item) {
+          let total = textValue(item.title).length;
+          if (textValue(item.subtitle)) total += 40;
+          if (textValue(item.imageURLString)) total += 20;
+          if (textValue(item.detailsURLString)) total += 10;
+          if (textValue(item.downloadURLString)) total += 10;
+          return total;
+        }
+
         for (const resource of resources) {
           const item = normalizeResource(resource);
           if (!item) continue;
-          if (seen.has(item.id)) continue;
-          seen.add(item.id);
+
+          const existingIndex = indexByID.get(item.id);
+          if (existingIndex !== undefined) {
+            if (score(item) > score(normalized[existingIndex])) {
+              normalized[existingIndex] = item;
+            }
+            continue;
+          }
+
+          indexByID.set(item.id, normalized.length);
           normalized.push(item);
         }
         return normalized.slice(0, 200);
@@ -383,9 +402,23 @@ private func makeBrowserInstrumentationScript() -> String {
       function buildDetailURL(torrentID) {
         if (!torrentID) return location.href;
         if (/m-team/i.test(location.hostname)) {
-          return absoluteURL("#/" + torrentID);
+          return absoluteURL("#/torrent/" + torrentID);
         }
         return location.href;
+      }
+
+      function currentMTeamTitle() {
+        const candidates = [
+          textValue(document.title).replace(/\s*-\s*M-Team.*$/i, ""),
+          elementText(document.querySelector("h1, h2, h3, .title, .name, .ant-page-header-heading-title")),
+          resourceTitle(document.body)
+        ];
+
+        for (const candidate of candidates) {
+          if (candidate) return candidate;
+        }
+
+        return "";
       }
 
       function scanDOMResources() {
@@ -398,9 +431,9 @@ private func makeBrowserInstrumentationScript() -> String {
           const onclick = node.getAttribute && node.getAttribute("onclick") || "";
           const explicitTorrentID = textValue(dataset.torrentId || dataset.rowKey);
           const inferredTorrentID = extractTorrentId(explicitTorrentID || onclick || href);
-          const torrentID = /m-team/i.test(location.hostname) ? inferredTorrentID : (inferredTorrentID || textValue(dataset.id));
+          const torrentID = /m-team/i.test(location.hostname) ? (inferredTorrentID || textValue(dataset.id)) : (inferredTorrentID || textValue(dataset.id));
           const isDownload = /download|download\.php|dl\.php|\/download\//i.test(href);
-          const isDetail = /(?:^|[\/#])details?\.php|\/detail\/|#\/detail\?|#\/\d+/i.test(href) || !!torrentID;
+          const isDetail = /(?:^|[\/#])details?\.php|\/detail\/|#\/detail\?|#\/torrent\/\d+|#\/\d+/i.test(href) || !!torrentID;
           if (!isDownload && !isDetail && !torrentID) return;
 
           const title = resourceTitle(node);
@@ -428,7 +461,7 @@ private func makeBrowserInstrumentationScript() -> String {
             }
             return mergeResources([{
               id: currentTorrentID,
-              title: textValue(document.title).replace(/\s*-\s*M-Team.*$/i, ""),
+              title: currentMTeamTitle(),
               subtitle: "",
               detailsURLString: location.href,
               downloadURLString: "",
@@ -492,7 +525,7 @@ private func makeBrowserInstrumentationScript() -> String {
 
         visit(payload);
         const normalized = mergeResources(results);
-        if (/\/torrent\/detail\b/i.test(requestURL || "")) {
+        if (/\/torrent\/detail\b|\/torrent\/\d+(?:\b|[/?#])/i.test(requestURL || "")) {
           window.__mediaHarborMTeamDetailResources = normalized;
         } else if (/\/torrent\/search\b/i.test(requestURL || "")) {
           window.__mediaHarborMTeamListResources = normalized;
