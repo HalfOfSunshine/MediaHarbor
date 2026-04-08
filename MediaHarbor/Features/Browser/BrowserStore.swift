@@ -154,14 +154,6 @@ final class BrowserStore {
         return handle
     }
 
-    func goBack() {
-        selectedSite.map { handle(for: $0.id).goBack() }
-    }
-
-    func goForward() {
-        selectedSite.map { handle(for: $0.id).goForward() }
-    }
-
     func reload() {
         selectedSite.map { handle(for: $0.id).reload() }
     }

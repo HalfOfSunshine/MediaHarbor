@@ -149,15 +149,11 @@ struct BrowserResource: Identifiable, Equatable, Sendable {
 struct BrowserPageSnapshot: Equatable, Sendable {
     var currentURLString: String
     var pageTitle: String
-    var canGoBack: Bool
-    var canGoForward: Bool
     var resources: [BrowserResource]
 
     static let empty = BrowserPageSnapshot(
         currentURLString: "",
         pageTitle: "",
-        canGoBack: false,
-        canGoForward: false,
         resources: []
     )
 }

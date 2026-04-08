@@ -14,22 +14,6 @@ final class BrowserWebViewHandle {
         webView?.load(URLRequest(url: url))
     }
 
-    func goBack() {
-        guard webView?.canGoBack == true else {
-            return
-        }
-
-        webView?.goBack()
-    }
-
-    func goForward() {
-        guard webView?.canGoForward == true else {
-            return
-        }
-
-        webView?.goForward()
-    }
-
     func reload() {
         webView?.reload()
     }
@@ -218,8 +202,6 @@ struct BrowserWebView: UIViewRepresentable {
         private func publish(webView: WKWebView) {
             latestSnapshot.currentURLString = webView.url?.absoluteString ?? latestSnapshot.currentURLString
             latestSnapshot.pageTitle = webView.title ?? latestSnapshot.pageTitle
-            latestSnapshot.canGoBack = webView.canGoBack
-            latestSnapshot.canGoForward = webView.canGoForward
             pushSnapshot()
         }
 
@@ -233,9 +215,6 @@ struct BrowserWebView: UIViewRepresentable {
         }
 
         private func pushSnapshot() {
-            latestSnapshot.canGoBack = handle.webView?.canGoBack ?? latestSnapshot.canGoBack
-            latestSnapshot.canGoForward = handle.webView?.canGoForward ?? latestSnapshot.canGoForward
-
             Task { @MainActor in
                 onSnapshotChanged(latestSnapshot)
             }

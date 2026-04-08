@@ -24,19 +24,15 @@ struct BrowserView: View {
                                 BrowserSiteStrip(
                                     sites: browser.visibleSites,
                                     selectedSiteID: selectedSite.id,
-                                    onSelect: { browser.selectSite($0) }
+                                    onSelect: { browser.selectSite($0) },
+                                    onOpenSettings: { isPresentingSettings = true }
                                 )
 
                                 BrowserAddressToolbar(
                                     displayedURLString: displayedURLString(for: selectedSite),
-                                    canGoBack: browser.pageSnapshot(for: selectedSite.id).canGoBack,
-                                    canGoForward: browser.pageSnapshot(for: selectedSite.id).canGoForward,
-                                    onBack: { browser.goBack() },
-                                    onForward: { browser.goForward() },
                                     onHome: { browser.goHome() },
                                     onReload: { browser.reload() },
                                     onAutofill: { browser.autofillCurrentSite() },
-                                    onOpenSettings: { isPresentingSettings = true },
                                     onSubmitAddress: { browser.navigateCurrentSite(to: $0) }
                                 )
 
@@ -137,44 +133,45 @@ private struct BrowserSiteStrip: View {
     let sites: [BrowserSite]
     let selectedSiteID: String
     let onSelect: (String) -> Void
+    let onOpenSettings: () -> Void
 
     var body: some View {
-        ScrollView(.horizontal, showsIndicators: false) {
-            HStack(spacing: 10) {
-                ForEach(sites) { site in
-                    Button {
-                        onSelect(site.id)
-                    } label: {
-                        Text(site.title)
-                            .font(.subheadline.weight(.semibold))
-                            .foregroundStyle(site.id == selectedSiteID ? .white : Color.primary)
-                            .padding(.horizontal, 14)
-                            .padding(.vertical, 8)
-                            .background(
-                                Capsule()
-                                    .fill(site.id == selectedSiteID ? MediaHarborTheme.tabSelectedColor : Color(uiColor: .secondarySystemBackground))
-                            )
+        HStack(spacing: 12) {
+            ScrollView(.horizontal, showsIndicators: false) {
+                HStack(spacing: 10) {
+                    ForEach(sites) { site in
+                        Button {
+                            onSelect(site.id)
+                        } label: {
+                            Text(site.title)
+                                .font(.subheadline.weight(.semibold))
+                                .foregroundStyle(site.id == selectedSiteID ? .white : Color.primary)
+                                .padding(.horizontal, 14)
+                                .padding(.vertical, 8)
+                                .background(
+                                    Capsule()
+                                        .fill(site.id == selectedSiteID ? MediaHarborTheme.tabSelectedColor : Color(uiColor: .secondarySystemBackground))
+                                )
+                        }
+                        .buttonStyle(.plain)
                     }
-                    .buttonStyle(.plain)
                 }
+                .padding(.vertical, 8)
             }
-            .padding(.horizontal, 16)
-            .padding(.top, 8)
-            .padding(.bottom, 10)
+
+            BrowserToolbarIconButton(systemName: "gearshape", isEnabled: true, action: onOpenSettings)
+                .padding(.vertical, 8)
         }
+        .padding(.horizontal, 16)
+        .padding(.bottom, 10)
     }
 }
 
 private struct BrowserAddressToolbar: View {
     let displayedURLString: String
-    let canGoBack: Bool
-    let canGoForward: Bool
-    let onBack: () -> Void
-    let onForward: () -> Void
     let onHome: () -> Void
     let onReload: () -> Void
     let onAutofill: () -> Void
-    let onOpenSettings: () -> Void
     let onSubmitAddress: (String) -> Void
 
     @State private var addressText = ""
@@ -182,12 +179,6 @@ private struct BrowserAddressToolbar: View {
 
     var body: some View {
         HStack(spacing: 10) {
-            if isAddressFocused == false {
-                BrowserToolbarIconButton(systemName: "chevron.left", isEnabled: canGoBack, action: onBack)
-                BrowserToolbarIconButton(systemName: "chevron.right", isEnabled: canGoForward, action: onForward)
-                BrowserToolbarIconButton(systemName: "house", isEnabled: true, action: onHome)
-            }
-
             addressField
 
             if isAddressFocused {
@@ -199,9 +190,9 @@ private struct BrowserAddressToolbar: View {
                 .foregroundStyle(MediaHarborTheme.tabSelectedColor)
                 .buttonStyle(.plain)
             } else {
+                BrowserToolbarIconButton(systemName: "house", isEnabled: true, action: onHome)
                 BrowserToolbarIconButton(systemName: "arrow.clockwise", isEnabled: true, action: onReload)
                 BrowserToolbarIconButton(systemName: "person.text.rectangle", isEnabled: true, action: onAutofill)
-                BrowserToolbarIconButton(systemName: "gearshape", isEnabled: true, action: onOpenSettings)
             }
         }
         .padding(.horizontal, 16)
