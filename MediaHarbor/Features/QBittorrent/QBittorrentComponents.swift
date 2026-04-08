@@ -270,28 +270,44 @@ struct QBTorrentPaginationCard: View {
                 .pickerStyle(.menu)
             }
 
-            HStack(spacing: 10) {
-                Button(action: previousAction) {
-                    Label("上一页", systemImage: "chevron.left")
-                }
-                .buttonStyle(.bordered)
-                .disabled(currentPage <= 0)
-
-                Text("第 \(currentPage + 1) / \(totalPages) 页")
-                    .font(.footnote.weight(.semibold))
-                    .foregroundStyle(.secondary)
-                    .frame(maxWidth: .infinity)
-
-                Button(action: nextAction) {
-                    Label("下一页", systemImage: "chevron.right")
-                }
-                .buttonStyle(.bordered)
-                .disabled(currentPage >= totalPages - 1)
-            }
+            QBTorrentPaginationControls(
+                currentPage: currentPage,
+                totalPages: totalPages,
+                previousAction: previousAction,
+                nextAction: nextAction
+            )
         }
         .padding(16)
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(Color(.secondarySystemBackground), in: RoundedRectangle(cornerRadius: 22, style: .continuous))
+    }
+}
+
+struct QBTorrentPaginationControls: View {
+    let currentPage: Int
+    let totalPages: Int
+    let previousAction: () -> Void
+    let nextAction: () -> Void
+
+    var body: some View {
+        HStack(spacing: 10) {
+            Button(action: previousAction) {
+                Label("上一页", systemImage: "chevron.left")
+            }
+            .buttonStyle(.bordered)
+            .disabled(currentPage <= 0)
+
+            Text("第 \(currentPage + 1) / \(totalPages) 页")
+                .font(.footnote.weight(.semibold))
+                .foregroundStyle(.secondary)
+                .frame(maxWidth: .infinity)
+
+            Button(action: nextAction) {
+                Label("下一页", systemImage: "chevron.right")
+            }
+            .buttonStyle(.bordered)
+            .disabled(currentPage >= totalPages - 1)
+        }
     }
 }
 

@@ -100,6 +100,18 @@ struct DownloadsView: View {
                                         }
                                     }
                                 }
+
+                                if totalPages > 1 {
+                                    QBTorrentPaginationControls(
+                                        currentPage: normalizedPageIndex,
+                                        totalPages: totalPages
+                                    ) {
+                                        currentPage = max(normalizedPageIndex - 1, 0)
+                                    } nextAction: {
+                                        currentPage = min(normalizedPageIndex + 1, totalPages - 1)
+                                    }
+                                    .padding(.top, 4)
+                                }
                             }
                         }
                     } else {
@@ -133,10 +145,26 @@ struct DownloadsView: View {
                 await qbittorrent.refresh()
             }
             .toolbar {
-                ToolbarItem(placement: .topBarTrailing) {
+                ToolbarItem(placement: .topBarLeading) {
                     Button(qbittorrent.session == nil ? "连接" : "管理") {
                         isPresentingConnectSheet = true
                     }
+                }
+
+                ToolbarItem(placement: .topBarTrailing) {
+                    Button {
+                        Task {
+                            await qbittorrent.refresh()
+                        }
+                    } label: {
+                        if qbittorrent.isRefreshing {
+                            ProgressView()
+                        } else {
+                            Image(systemName: "arrow.clockwise")
+                        }
+                    }
+                    .disabled(qbittorrent.session == nil || qbittorrent.isRefreshing)
+                    .accessibilityLabel("刷新")
                 }
             }
             .task {
