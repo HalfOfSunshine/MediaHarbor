@@ -79,19 +79,56 @@ enum JellyfinPlaybackOpenTarget: String, CaseIterable, Codable, Identifiable, Se
 final class JellyfinPlaybackPreferences {
     var preferredOpenTarget: JellyfinPlaybackOpenTarget {
         didSet {
-            defaults.set(preferredOpenTarget.rawValue, forKey: Self.preferredOpenTargetKey)
+            storage.set(preferredOpenTarget.rawValue, forKey: Self.preferredOpenTargetKey)
         }
     }
 
     @ObservationIgnored
-    private let defaults: UserDefaults
+    private let storage: CloudBackedDefaults
+
+    @ObservationIgnored
+    private var cloudObserver: NSObjectProtocol?
 
     private static let preferredOpenTargetKey = "jellyfin.playback.preferred-open-target"
 
-    init(defaults: UserDefaults = .standard) {
-        self.defaults = defaults
+    init(defaults: UserDefaults = .standard, cloudStore: NSUbiquitousKeyValueStore? = nil) {
+        self.storage = CloudBackedDefaults(defaults: defaults, cloudStore: cloudStore)
 
-        if let rawValue = defaults.string(forKey: Self.preferredOpenTargetKey),
+        if let rawValue = storage.string(forKey: Self.preferredOpenTargetKey),
+           let target = JellyfinPlaybackOpenTarget(rawValue: rawValue)
+        {
+            preferredOpenTarget = target
+        } else {
+            preferredOpenTarget = .app
+        }
+
+        installCloudObserver()
+    }
+
+    deinit {
+        if let cloudObserver {
+            NotificationCenter.default.removeObserver(cloudObserver)
+        }
+    }
+
+    private func installCloudObserver() {
+        cloudObserver = NotificationCenter.default.addObserver(
+            forName: NSUbiquitousKeyValueStore.didChangeExternallyNotification,
+            object: NSUbiquitousKeyValueStore.default,
+            queue: .main
+        ) { [weak self] _ in
+            guard let self else {
+                return
+            }
+
+            Task { @MainActor in
+                self.syncFromCloud()
+            }
+        }
+    }
+
+    private func syncFromCloud() {
+        if let rawValue = storage.string(forKey: Self.preferredOpenTargetKey),
            let target = JellyfinPlaybackOpenTarget(rawValue: rawValue)
         {
             preferredOpenTarget = target

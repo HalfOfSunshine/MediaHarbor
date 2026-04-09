@@ -27,6 +27,9 @@ final class QBittorrentStore {
     @ObservationIgnored
     private var queuedRefresh = false
 
+    @ObservationIgnored
+    private var cloudObserver: NSObjectProtocol?
+
     init(
         sessionStore: QBittorrentSessionStore = QBittorrentSessionStore(),
         apiClient: QBittorrentAPIClient = QBittorrentAPIClient()
@@ -34,11 +37,18 @@ final class QBittorrentStore {
         self.sessionStore = sessionStore
         self.apiClient = apiClient
         self.session = sessionStore.loadSession()
+        installCloudObserver()
 
         if let session, sessionStore.loadPassword(for: session) != nil {
             Task {
                 await refresh()
             }
+        }
+    }
+
+    deinit {
+        if let cloudObserver {
+            NotificationCenter.default.removeObserver(cloudObserver)
         }
     }
 
@@ -355,5 +365,44 @@ final class QBittorrentStore {
         }
 
         errorMessage = error.localizedDescription
+    }
+
+    private func installCloudObserver() {
+        cloudObserver = NotificationCenter.default.addObserver(
+            forName: NSUbiquitousKeyValueStore.didChangeExternallyNotification,
+            object: NSUbiquitousKeyValueStore.default,
+            queue: .main
+        ) { [weak self] _ in
+            guard let self else {
+                return
+            }
+
+            Task { @MainActor in
+                await self.syncFromCloud()
+            }
+        }
+    }
+
+    private func syncFromCloud() async {
+        let previousAccountKey = session?.accountKey
+        let reloadedSession = sessionStore.loadSession()
+
+        guard previousAccountKey != reloadedSession?.accountKey else {
+            session = reloadedSession
+            return
+        }
+
+        if reloadedSession == nil {
+            clearRuntimeState()
+            return
+        }
+
+        session = reloadedSession
+        errorMessage = nil
+        noticeMessage = nil
+
+        if let reloadedSession, sessionStore.loadPassword(for: reloadedSession) != nil {
+            await refresh()
+        }
     }
 }

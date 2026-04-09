@@ -2,6 +2,12 @@ import Foundation
 import Security
 
 final class KeychainStore {
+    private enum SynchronizableMode {
+        case any
+        case enabled
+        case disabled
+    }
+
     enum KeychainError: LocalizedError {
         case unexpectedStatus(OSStatus)
         case invalidData
@@ -16,34 +22,29 @@ final class KeychainStore {
         }
     }
 
+    private let synchronizable: Bool
+
+    init(synchronizable: Bool = true) {
+        self.synchronizable = synchronizable
+    }
+
     func save(_ value: String, service: String, account: String) throws {
         let data = Data(value.utf8)
-        let query = baseQuery(service: service, account: account)
+        try deleteMatchingAny(service: service, account: account)
 
-        let attributesToUpdate: [CFString: Any] = [
-            kSecValueData: data,
-        ]
+        do {
+            try add(data: data, service: service, account: account, synchronizableMode: synchronizable ? .enabled : .disabled)
+        } catch {
+            guard synchronizable else {
+                throw error
+            }
 
-        let updateStatus = SecItemUpdate(query as CFDictionary, attributesToUpdate as CFDictionary)
-        if updateStatus == errSecSuccess {
-            return
-        }
-
-        if updateStatus != errSecItemNotFound {
-            throw KeychainError.unexpectedStatus(updateStatus)
-        }
-
-        var item = query
-        item[kSecValueData as String] = data
-
-        let addStatus = SecItemAdd(item as CFDictionary, nil)
-        guard addStatus == errSecSuccess else {
-            throw KeychainError.unexpectedStatus(addStatus)
+            try add(data: data, service: service, account: account, synchronizableMode: .disabled)
         }
     }
 
     func read(service: String, account: String) throws -> String? {
-        var query = baseQuery(service: service, account: account)
+        var query = baseQuery(service: service, account: account, synchronizableMode: .any)
         query[kSecReturnData as String] = kCFBooleanTrue
         query[kSecMatchLimit as String] = kSecMatchLimitOne
 
@@ -65,17 +66,46 @@ final class KeychainStore {
     }
 
     func delete(service: String, account: String) throws {
-        let status = SecItemDelete(baseQuery(service: service, account: account) as CFDictionary)
+        let status = SecItemDelete(baseQuery(service: service, account: account, synchronizableMode: .any) as CFDictionary)
         guard status == errSecSuccess || status == errSecItemNotFound else {
             throw KeychainError.unexpectedStatus(status)
         }
     }
 
-    private func baseQuery(service: String, account: String) -> [String: Any] {
-        [
+    private func add(data: Data, service: String, account: String, synchronizableMode: SynchronizableMode) throws {
+        var item = baseQuery(service: service, account: account, synchronizableMode: synchronizableMode)
+        item[kSecValueData as String] = data
+        item[kSecAttrAccessible as String] = kSecAttrAccessibleAfterFirstUnlock
+
+        let addStatus = SecItemAdd(item as CFDictionary, nil)
+        guard addStatus == errSecSuccess else {
+            throw KeychainError.unexpectedStatus(addStatus)
+        }
+    }
+
+    private func deleteMatchingAny(service: String, account: String) throws {
+        let status = SecItemDelete(baseQuery(service: service, account: account, synchronizableMode: .any) as CFDictionary)
+        guard status == errSecSuccess || status == errSecItemNotFound else {
+            throw KeychainError.unexpectedStatus(status)
+        }
+    }
+
+    private func baseQuery(service: String, account: String, synchronizableMode: SynchronizableMode) -> [String: Any] {
+        var query: [String: Any] = [
             kSecClass as String: kSecClassGenericPassword,
             kSecAttrService as String: service,
             kSecAttrAccount as String: account,
         ]
+
+        switch synchronizableMode {
+        case .any:
+            query[kSecAttrSynchronizable as String] = kSecAttrSynchronizableAny
+        case .enabled:
+            query[kSecAttrSynchronizable as String] = kCFBooleanTrue
+        case .disabled:
+            break
+        }
+
+        return query
     }
 }

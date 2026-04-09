@@ -20,7 +20,7 @@ final class BrowserStore {
     var errorMessage: String?
 
     @ObservationIgnored
-    private let defaults: UserDefaults
+    private let storage: CloudBackedDefaults
 
     @ObservationIgnored
     private let credentialStore: BrowserCredentialStore
@@ -44,17 +44,31 @@ final class BrowserStore {
     @ObservationIgnored
     private var lastChromeToggleDates: [String: Date] = [:]
 
-    init(defaults: UserDefaults = .standard, credentialStore: BrowserCredentialStore = BrowserCredentialStore()) {
-        self.defaults = defaults
+    @ObservationIgnored
+    private var cloudObserver: NSObjectProtocol?
+
+    init(
+        defaults: UserDefaults = .standard,
+        cloudStore: NSUbiquitousKeyValueStore? = nil,
+        credentialStore: BrowserCredentialStore = BrowserCredentialStore()
+    ) {
+        self.storage = CloudBackedDefaults(defaults: defaults, cloudStore: cloudStore)
         self.credentialStore = credentialStore
-        self.isEnabled = defaults.object(forKey: Constants.enabledKey) as? Bool ?? true
-        self.sites = BrowserStore.loadSites(defaults: defaults)
-        self.selectedSiteID = defaults.string(forKey: Constants.selectedSiteIDKey) ?? BrowserSite.defaultSites().first?.id ?? ""
-        self.preferredCategoryName = defaults.string(forKey: Constants.preferredCategoryKey) ?? ""
-        self.preferredSavePath = defaults.string(forKey: Constants.preferredSavePathKey) ?? ""
+        self.isEnabled = storage.bool(forKey: Constants.enabledKey) ?? true
+        self.sites = BrowserStore.loadSites(storage: storage)
+        self.selectedSiteID = storage.string(forKey: Constants.selectedSiteIDKey) ?? BrowserSite.defaultSites().first?.id ?? ""
+        self.preferredCategoryName = storage.string(forKey: Constants.preferredCategoryKey) ?? ""
+        self.preferredSavePath = storage.string(forKey: Constants.preferredSavePathKey) ?? ""
+        installCloudObserver()
 
         if sites.contains(where: { $0.id == selectedSiteID }) == false {
             selectedSiteID = sites.first?.id ?? ""
+        }
+    }
+
+    deinit {
+        if let cloudObserver {
+            NotificationCenter.default.removeObserver(cloudObserver)
         }
     }
 
@@ -68,7 +82,7 @@ final class BrowserStore {
 
     func setEnabled(_ enabled: Bool) {
         isEnabled = enabled
-        defaults.set(enabled, forKey: Constants.enabledKey)
+        storage.set(enabled, forKey: Constants.enabledKey)
     }
 
     func selectSite(_ siteID: String) {
@@ -77,7 +91,7 @@ final class BrowserStore {
         }
 
         selectedSiteID = siteID
-        defaults.set(siteID, forKey: Constants.selectedSiteIDKey)
+        storage.set(siteID, forKey: Constants.selectedSiteIDKey)
     }
 
     func pageSnapshot(for siteID: String) -> BrowserPageSnapshot {
@@ -310,8 +324,8 @@ final class BrowserStore {
     func setPreferredDownloadOptions(categoryName: String, savePath: String) {
         preferredCategoryName = categoryName
         preferredSavePath = savePath
-        defaults.set(categoryName, forKey: Constants.preferredCategoryKey)
-        defaults.set(savePath, forKey: Constants.preferredSavePathKey)
+        storage.set(categoryName, forKey: Constants.preferredCategoryKey)
+        storage.set(savePath, forKey: Constants.preferredSavePathKey)
     }
 
     private func persistSites() {
@@ -319,16 +333,53 @@ final class BrowserStore {
         sites = persistedSites
 
         if let data = try? encoder.encode(persistedSites) {
-            defaults.set(data, forKey: Constants.sitesKey)
+            storage.set(data, forKey: Constants.sitesKey)
         }
     }
 
-    private static func loadSites(defaults: UserDefaults) -> [BrowserSite] {
-        guard let data = defaults.data(forKey: Constants.sitesKey),
+    private static func loadSites(storage: CloudBackedDefaults) -> [BrowserSite] {
+        guard let data = storage.data(forKey: Constants.sitesKey),
               let decodedSites = try? JSONDecoder().decode([BrowserSite].self, from: data) else {
             return BrowserSite.defaultSites()
         }
 
         return BrowserSite.mergedStoredSitesPreservingOrder(decodedSites)
+    }
+
+    private func installCloudObserver() {
+        cloudObserver = NotificationCenter.default.addObserver(
+            forName: NSUbiquitousKeyValueStore.didChangeExternallyNotification,
+            object: NSUbiquitousKeyValueStore.default,
+            queue: .main
+        ) { [weak self] _ in
+            guard let self else {
+                return
+            }
+
+            Task { @MainActor in
+                self.syncFromCloud()
+            }
+        }
+    }
+
+    private func syncFromCloud() {
+        isEnabled = storage.bool(forKey: Constants.enabledKey) ?? true
+        sites = BrowserStore.loadSites(storage: storage)
+        preferredCategoryName = storage.string(forKey: Constants.preferredCategoryKey) ?? ""
+        preferredSavePath = storage.string(forKey: Constants.preferredSavePathKey) ?? ""
+
+        let persistedSelectedSiteID = storage.string(forKey: Constants.selectedSiteIDKey) ?? sites.first?.id ?? ""
+        if sites.contains(where: { $0.id == persistedSelectedSiteID }) {
+            selectedSiteID = persistedSelectedSiteID
+        } else {
+            selectedSiteID = visibleSites.first?.id ?? ""
+        }
+
+        let validSiteIDs = Set(sites.map(\.id))
+        pageSnapshots = pageSnapshots.filter { validSiteIDs.contains($0.key) }
+        handles = handles.filter { validSiteIDs.contains($0.key) }
+        collapsedChromeSiteIDs = Set(collapsedChromeSiteIDs.filter { validSiteIDs.contains($0) })
+        lastScrollOffsets = lastScrollOffsets.filter { validSiteIDs.contains($0.key) }
+        lastChromeToggleDates = lastChromeToggleDates.filter { validSiteIDs.contains($0.key) }
     }
 }

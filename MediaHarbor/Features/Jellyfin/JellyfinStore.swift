@@ -46,6 +46,9 @@ final class JellyfinStore {
     @ObservationIgnored
     private var lastSearchTerm: String = ""
 
+    @ObservationIgnored
+    private var cloudObserver: NSObjectProtocol?
+
     init(
         sessionStore: JellyfinSessionStore = JellyfinSessionStore(),
         apiClient: JellyfinAPIClient = JellyfinAPIClient()
@@ -54,11 +57,18 @@ final class JellyfinStore {
         self.apiClient = apiClient
         reloadSavedSessions()
         self.session = sessionStore.loadActiveSession()
+        installCloudObserver()
 
         if let session, sessionStore.loadAccessToken(for: session) != nil {
             Task {
                 await refreshDashboard()
             }
+        }
+    }
+
+    deinit {
+        if let cloudObserver {
+            NotificationCenter.default.removeObserver(cloudObserver)
         }
     }
 
@@ -194,7 +204,7 @@ final class JellyfinStore {
         }
 
         guard let context = activeContext() else {
-            disconnect()
+            handleMissingActiveContext()
             return
         }
 
@@ -264,7 +274,7 @@ final class JellyfinStore {
         }
 
         guard let context = activeContext() else {
-            disconnect()
+            handleMissingActiveContext()
             return
         }
 
@@ -303,7 +313,7 @@ final class JellyfinStore {
         }
 
         guard let context = activeContext() else {
-            disconnect()
+            handleMissingActiveContext(target: .library)
             return
         }
 
@@ -355,7 +365,7 @@ final class JellyfinStore {
         }
 
         guard let context = activeContext() else {
-            disconnect()
+            handleMissingActiveContext(target: .search)
             return
         }
 
@@ -405,7 +415,7 @@ final class JellyfinStore {
         }
 
         guard let context = activeContext() else {
-            disconnect()
+            handleMissingActiveContext(target: .library)
             return
         }
 
@@ -447,7 +457,7 @@ final class JellyfinStore {
 
     func setFavorite(itemID: String, isFavorite: Bool) async throws {
         guard let context = activeContext() else {
-            disconnect()
+            handleMissingActiveContext()
             throw JellyfinAPIClient.APIError.unauthorized
         }
 
@@ -487,7 +497,7 @@ final class JellyfinStore {
 
     func playbackStream(for itemID: String) async throws -> JellyfinPlaybackStream {
         guard let context = activeContext() else {
-            disconnect()
+            handleMissingActiveContext()
             throw JellyfinAPIClient.APIError.unauthorized
         }
 
@@ -501,7 +511,7 @@ final class JellyfinStore {
 
     func childItems(for item: JellyfinLibraryItem) async throws -> [JellyfinLibraryItem] {
         guard let context = activeContext() else {
-            disconnect()
+            handleMissingActiveContext()
             throw JellyfinAPIClient.APIError.unauthorized
         }
 
@@ -532,7 +542,7 @@ final class JellyfinStore {
         )
     }
 
-    func disconnect() {
+    func removeCurrentSession() {
         guard let session else {
             clearRuntimeState()
             reloadSavedSessions()
@@ -558,7 +568,7 @@ final class JellyfinStore {
         }
 
         guard let context = activeContext() else {
-            disconnect()
+            handleMissingActiveContext(target: .console)
             return
         }
 
@@ -585,7 +595,7 @@ final class JellyfinStore {
         }
 
         guard let context = activeContext() else {
-            disconnect()
+            handleMissingActiveContext(target: .console)
             return
         }
 
@@ -628,6 +638,41 @@ final class JellyfinStore {
 
     private func reloadSavedSessions() {
         savedSessions = sessionStore.loadSessions()
+    }
+
+    private func installCloudObserver() {
+        cloudObserver = NotificationCenter.default.addObserver(
+            forName: NSUbiquitousKeyValueStore.didChangeExternallyNotification,
+            object: NSUbiquitousKeyValueStore.default,
+            queue: .main
+        ) { [weak self] _ in
+            guard let self else {
+                return
+            }
+
+            Task { @MainActor in
+                await self.syncFromCloud()
+            }
+        }
+    }
+
+    private func syncFromCloud() async {
+        let previousSessionKey = session?.accountKey
+        let reloadedSession = sessionStore.loadActiveSession()
+        reloadSavedSessions()
+
+        guard previousSessionKey != reloadedSession?.accountKey else {
+            session = reloadedSession
+            return
+        }
+
+        clearRuntimeState()
+        session = reloadedSession
+
+        if let reloadedSession, sessionStore.loadAccessToken(for: reloadedSession) != nil {
+            await refreshDashboard(forceReloadLibrary: true, showErrors: false)
+            await refreshConsole(showErrors: false)
+        }
     }
 
     static func connectionErrorMessage(for apiError: JellyfinAPIClient.APIError) -> String {
@@ -689,8 +734,7 @@ final class JellyfinStore {
         if let apiError = error as? JellyfinAPIClient.APIError {
             switch apiError {
             case .unauthorized:
-                disconnect()
-                errorMessage = "Jellyfin 登录状态已失效，请重新连接。"
+                invalidateActiveSession(message: "Jellyfin 登录状态已失效。已保存账号仍保留在本地，请重新选择账号或重新添加。")
                 return
             case .forbidden:
                 let message = "当前账号没有权限访问这个 Jellyfin 功能。"
@@ -717,8 +761,7 @@ final class JellyfinStore {
         if let apiError = error as? JellyfinAPIClient.APIError {
             switch apiError {
             case .unauthorized:
-                disconnect()
-                errorMessage = "Jellyfin 登录状态已失效，请重新连接。"
+                invalidateActiveSession(message: "Jellyfin 登录状态已失效。已保存账号仍保留在本地，请重新选择账号或重新添加。")
                 return
             case .forbidden:
                 consoleErrorMessage = "当前账号没有 Jellyfin 管理权限，无法查看控制台或执行扫描。"
@@ -729,6 +772,40 @@ final class JellyfinStore {
         }
 
         consoleErrorMessage = error.localizedDescription
+    }
+
+    private enum MissingContextTarget {
+        case general
+        case library
+        case search
+        case console
+    }
+
+    private func handleMissingActiveContext(target: MissingContextTarget = .general) {
+        invalidateActiveSession()
+
+        let message = "本地已保存的 Jellyfin 账号仍在，但当前登录凭证不可用。请重新选择账号，或重新添加这个账号。"
+        switch target {
+        case .general:
+            errorMessage = message
+        case .library:
+            libraryErrorMessage = message
+        case .search:
+            searchErrorMessage = message
+            isSearching = false
+        case .console:
+            consoleErrorMessage = message
+        }
+    }
+
+    private func invalidateActiveSession(message: String? = nil) {
+        clearRuntimeState()
+        session = nil
+        reloadSavedSessions()
+
+        if let message {
+            errorMessage = message
+        }
     }
 
     private func updateFavoriteState(itemID: String, isFavorite: Bool) {

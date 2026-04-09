@@ -200,6 +200,31 @@ struct MediaHarborTests {
     }
 
     @Test
+    func jellyfinSessionStoreCanKeepSavedAccountsWithoutAnActiveSession() async throws {
+        let suiteName = "MediaHarborTests.JellyfinSessionStore.\(UUID().uuidString)"
+        let defaults = try #require(UserDefaults(suiteName: suiteName))
+        defaults.removePersistentDomain(forName: suiteName)
+
+        let store = JellyfinSessionStore(defaults: defaults)
+        let session = JellyfinSessionSnapshot(
+            serverURLString: "http://media.example:8096",
+            serverName: "Home",
+            serverVersion: "10.11.6",
+            username: "media-admin",
+            userID: "user-1"
+        )
+
+        try store.save(session: session, accessToken: "token-1")
+        store.clearActiveSession()
+
+        #expect(store.loadSessions().map(\.accountKey) == [session.accountKey])
+        #expect(store.loadActiveSession() == nil)
+
+        store.clear()
+        defaults.removePersistentDomain(forName: suiteName)
+    }
+
+    @Test
     func jellyfinTaskProgressTextIgnoresNonFiniteValues() async throws {
         let runningTask = JellyfinTask(
             id: "scan",
@@ -382,7 +407,8 @@ struct MediaHarborTests {
             detailsURLString: "https://kp.m-team.cc/details.php?id=349061",
             downloadURLString: nil,
             imageURLString: nil,
-            torrentID: nil
+            torrentID: nil,
+            isFree: false
         )
         let hashRouteResource = BrowserResource(
             id: "2",
@@ -391,7 +417,8 @@ struct MediaHarborTests {
             detailsURLString: "https://h5.m-team.cc/#/349061",
             downloadURLString: nil,
             imageURLString: nil,
-            torrentID: nil
+            torrentID: nil,
+            isFree: false
         )
 
         #expect(resolver.extractTorrentID(from: detailsPHPResource) == "349061")
@@ -408,7 +435,8 @@ struct MediaHarborTests {
             detailsURLString: "https://kp.m-team.cc/userdetails.php?id=123456",
             downloadURLString: nil,
             imageURLString: nil,
-            torrentID: nil
+            torrentID: nil,
+            isFree: false
         )
         let genericProfileRoute = BrowserResource(
             id: "2",
@@ -417,7 +445,8 @@ struct MediaHarborTests {
             detailsURLString: "https://h5.m-team.cc/#/profile?id=123456",
             downloadURLString: nil,
             imageURLString: nil,
-            torrentID: nil
+            torrentID: nil,
+            isFree: false
         )
 
         #expect(resolver.extractTorrentID(from: userProfileResource) == nil)

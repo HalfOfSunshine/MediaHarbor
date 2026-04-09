@@ -36,7 +36,7 @@ struct SettingsView: View {
                         }
 
                         Button("移除当前账号", role: .destructive) {
-                            jellyfin.disconnect()
+                            jellyfin.removeCurrentSession()
                         }
                     } else {
                         if jellyfin.savedSessions.isEmpty {
@@ -128,6 +128,7 @@ struct SettingsView: View {
 
                 Section("构建说明") {
                     Text("当前这版已经把 Jellyfin 和 qBittorrent 的基础链路接起来了，目标是先让 NAS 上最常用的管理动作都能在 iPhone 上跑通。")
+                    Text("账号、站点地址、默认播放方式会通过 iCloud 同步；密码、令牌等敏感信息会通过 iCloud 钥匙串同步到同一 Apple ID 的其他设备。")
                     Text("Debug 构建对本地网络测试更友好。等准备公开发布前，我们再继续收紧 ATS、补播放入口，并把下载器能力继续做细。")
                 }
                 .foregroundStyle(.secondary)
