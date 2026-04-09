@@ -103,8 +103,11 @@ struct JellyfinPlayerView: View {
             AppOrientationController.setPlaybackOrientationMode(.landscape)
         }
         .onDisappear {
+            controller.prepareForDismissal()
             controller.reset()
-            AppOrientationController.setPlaybackOrientationMode(.portrait)
+            DispatchQueue.main.async {
+                AppOrientationController.setPlaybackOrientationMode(.portrait)
+            }
         }
         .statusBarHidden()
         .accessibilityIdentifier("jellyfin.player.screen")
@@ -128,7 +131,9 @@ struct JellyfinPlayerView: View {
 
     private func togglePlaybackOrientation() {
         playbackOrientationMode = playbackOrientationMode.toggleTarget
+        controller.prepareForGeometryTransition()
         AppOrientationController.setPlaybackOrientationMode(playbackOrientationMode)
+        controller.restoreDrawableAfterGeometryTransition()
     }
 }
 
@@ -144,10 +149,6 @@ private struct JellyfinVLCPlayerSurface: UIViewRepresentable {
 
     func updateUIView(_ uiView: UIView, context: Context) {
         controller.attachDrawable(uiView)
-    }
-
-    static func dismantleUIView(_ uiView: UIView, coordinator: ()) {
-        uiView.layer.sublayers?.removeAll()
     }
 }
 
@@ -205,6 +206,23 @@ final class JellyfinPlayerController: NSObject, VLCMediaPlayerDelegate {
         guard drawableView !== view else { return }
         drawableView = view
         player.drawable = view
+    }
+
+    func prepareForGeometryTransition() {
+        player.drawable = nil
+    }
+
+    func restoreDrawableAfterGeometryTransition() {
+        guard let drawableView else { return }
+
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) { [weak self, weak drawableView] in
+            guard let self, let drawableView else { return }
+            self.player.drawable = drawableView
+        }
+    }
+
+    func prepareForDismissal() {
+        player.drawable = nil
     }
 
     func load(candidates: [JellyfinPlaybackCandidate], startPositionTicks: Int64?) {
