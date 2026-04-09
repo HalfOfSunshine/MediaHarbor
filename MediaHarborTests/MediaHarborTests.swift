@@ -225,6 +225,17 @@ struct MediaHarborTests {
     }
 
     @Test
+    func playbackOrientationModesMatchExpectedMasksAndDefaultRequests() async throws {
+        #expect(AppOrientationController.PlaybackOrientationMode.portrait.supportedMask == .portrait)
+        #expect(AppOrientationController.PlaybackOrientationMode.portrait.requestedOrientation == .portrait)
+        #expect(AppOrientationController.PlaybackOrientationMode.portrait.toggleTarget == .landscape)
+
+        #expect(AppOrientationController.PlaybackOrientationMode.landscape.supportedMask == .landscape)
+        #expect(AppOrientationController.PlaybackOrientationMode.landscape.requestedOrientation == .landscapeRight)
+        #expect(AppOrientationController.PlaybackOrientationMode.landscape.toggleTarget == .portrait)
+    }
+
+    @Test
     func jellyfinTaskProgressTextIgnoresNonFiniteValues() async throws {
         let runningTask = JellyfinTask(
             id: "scan",

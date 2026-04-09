@@ -9,6 +9,7 @@ import SwiftUI
 
 @main
 struct MediaHarborApp: App {
+    @UIApplicationDelegateAdaptor(MediaHarborAppDelegate.self) private var appDelegate
     @State private var appState = AppState()
 
     init() {

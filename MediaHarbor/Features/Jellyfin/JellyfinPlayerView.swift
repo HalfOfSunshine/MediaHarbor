@@ -11,9 +11,10 @@ struct JellyfinPlayerView: View {
     let startPositionTicks: Int64?
 
     @State private var controller = JellyfinPlayerController()
+    @State private var playbackOrientationMode: AppOrientationController.PlaybackOrientationMode = .landscape
 
     var body: some View {
-        ZStack(alignment: .topTrailing) {
+        ZStack {
             Color.black.ignoresSafeArea()
 
             JellyfinVLCPlayerSurface(controller: controller)
@@ -55,24 +56,55 @@ struct JellyfinPlayerView: View {
             }
             .ignoresSafeArea(edges: .bottom)
 
-            Button {
-                dismiss()
-            } label: {
-                Image(systemName: "xmark")
-                    .font(.headline.weight(.bold))
-                    .foregroundStyle(.white)
-                    .frame(width: 40, height: 40)
-                    .background(.black.opacity(0.56), in: Circle())
+            VStack {
+                HStack {
+                    Spacer()
+
+                    Button {
+                        dismiss()
+                    } label: {
+                        Image(systemName: "xmark")
+                            .font(.headline.weight(.bold))
+                            .foregroundStyle(.white)
+                            .frame(width: 40, height: 40)
+                            .background(.black.opacity(0.56), in: Circle())
+                    }
+                    .buttonStyle(.plain)
+                }
+
+                Spacer()
+
+                HStack {
+                    Spacer()
+
+                    Button {
+                        togglePlaybackOrientation()
+                    } label: {
+                        Image(systemName: playbackOrientationButtonIconName)
+                            .font(.headline.weight(.bold))
+                            .foregroundStyle(.white)
+                            .frame(width: 44, height: 44)
+                            .background(.black.opacity(0.56), in: Circle())
+                    }
+                    .buttonStyle(.plain)
+                }
+
+                Spacer()
             }
-            .buttonStyle(.plain)
             .padding(.top, 16)
-            .padding(.trailing, 18)
+            .padding(.horizontal, 18)
+            .padding(.vertical, 18)
         }
         .task(id: candidateTaskID) {
             controller.load(candidates: candidates, startPositionTicks: startPositionTicks)
         }
+        .onAppear {
+            playbackOrientationMode = .landscape
+            AppOrientationController.setPlaybackOrientationMode(.landscape)
+        }
         .onDisappear {
             controller.reset()
+            AppOrientationController.setPlaybackOrientationMode(.portrait)
         }
         .statusBarHidden()
         .accessibilityIdentifier("jellyfin.player.screen")
@@ -83,6 +115,20 @@ struct JellyfinPlayerView: View {
             .map { "\($0.routeDescription)|\($0.url.absoluteString)" }
             .joined(separator: "||")
         return "\(candidateKey)|\(startPositionTicks ?? 0)"
+    }
+
+    private var playbackOrientationButtonIconName: String {
+        switch playbackOrientationMode {
+        case .portrait:
+            return "rectangle.landscape.rotate"
+        case .landscape:
+            return "rectangle.portrait.rotate"
+        }
+    }
+
+    private func togglePlaybackOrientation() {
+        playbackOrientationMode = playbackOrientationMode.toggleTarget
+        AppOrientationController.setPlaybackOrientationMode(playbackOrientationMode)
     }
 }
 
@@ -136,6 +182,9 @@ final class JellyfinPlayerController: NSObject, VLCMediaPlayerDelegate {
     @ObservationIgnored
     private var isSwitchingCandidate = false
 
+    @ObservationIgnored
+    private var hasLoadedCandidate = false
+
     override init() {
         self.player = VLCMediaPlayer(options: [
             "--no-video-title-show",
@@ -179,6 +228,7 @@ final class JellyfinPlayerController: NSObject, VLCMediaPlayerDelegate {
         candidates = []
         currentCandidateIndex = 0
         isSwitchingCandidate = false
+        hasLoadedCandidate = false
         pendingStartMilliseconds = nil
         didApplyInitialSeek = false
         statusText = "正在初始化"
@@ -222,15 +272,19 @@ final class JellyfinPlayerController: NSObject, VLCMediaPlayerDelegate {
             updatePlaybackClock()
         case .error:
             if tryAdvanceToNextCandidateIfNeeded() == false {
+                hasLoadedCandidate = false
                 statusText = "播放失败"
                 isBuffering = false
             }
         case .stopped:
-            if player.media != nil {
-                if tryAdvanceToNextCandidateIfNeeded() == false {
-                    statusText = "已停止"
-                    isBuffering = false
-                }
+            guard hasLoadedCandidate else {
+                return
+            }
+
+            if tryAdvanceToNextCandidateIfNeeded() == false {
+                hasLoadedCandidate = false
+                statusText = "已停止"
+                isBuffering = false
             }
         default:
             statusText = "正在初始化"
@@ -268,6 +322,7 @@ final class JellyfinPlayerController: NSObject, VLCMediaPlayerDelegate {
         routeText = candidate.routeDescription
         statusText = currentCandidateIndex == 0 ? "正在初始化" : "正在切换备用播放路线"
         isBuffering = true
+        hasLoadedCandidate = true
         currentTimeText = "00:00"
         durationText = "--:--"
         didApplyInitialSeek = pendingStartMilliseconds == nil
